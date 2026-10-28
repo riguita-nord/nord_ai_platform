@@ -20,3 +20,33 @@ $("#modelSelect").onchange=e=>selected=e.target.value;
 $("#send").onclick=send;$("#prompt").onkeydown=e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}};
 document.querySelectorAll("[data-prompt]").forEach(b=>b.onclick=()=>{$("#prompt").value=b.dataset.prompt;send()});
 api("me").then(j=>{showApp(j.authenticated);if(j.authenticated)Promise.all([loadChats(),loadModels()])}).catch(()=>showApp(false));
+
+async function loadLearning(){
+ const data=await api("learning");const box=$("#learnItems");box.replaceChildren();
+ $("#learnCount").textContent=data.items.length+" apresentados";
+ for(const item of data.items){
+   const row=document.createElement("article");row.className="learn-item";
+   const header=document.createElement("div");header.className="model-title";
+   const title=document.createElement("strong");title.textContent=item.title;
+   const del=document.createElement("button");del.textContent="Remover";del.className="ghost";
+   del.onclick=async()=>{if(!confirm("Remover este conhecimento?"))return;try{await api("learning/delete",{id:item.id});await loadLearning()}catch(e){alert(e.message)}};
+   header.append(title,del);
+   const note=document.createElement("p");note.className="muted";note.textContent=item.topic+" · "+item.excerpt.slice(0,190)+"…";
+   const source=document.createElement("a");source.href=item.url;source.target="_blank";source.rel="noopener noreferrer";source.textContent="Abrir fonte original";
+   row.append(header,note,source);box.append(row);
+ }
+ if(!data.items.length)box.textContent="Ainda não existem conhecimentos guardados.";
+}
+$("#learningBtn").onclick=()=>{$("#learningPanel").classList.remove("hidden");$(".sidebar").classList.remove("open");loadLearning().catch(e=>$("#learnFeedback").textContent=e.message)};
+$("#closeLearning").onclick=()=>$("#learningPanel").classList.add("hidden");
+$("#learningPanel").onclick=e=>{if(e.target===$("#learningPanel"))$("#learningPanel").classList.add("hidden")};
+$("#learnForm").onsubmit=async e=>{
+ e.preventDefault();const btn=$("#learnSearch");btn.disabled=true;
+ $("#learnFeedback").textContent="A pesquisar uma fonte pública autorizada…";
+ try{
+   const data=await api("learning/search",{topic:$("#learnTopic").value,query:$("#learnQuery").value});
+   $("#learnFeedback").textContent=data.results.length+" resultados encontrados · "+data.saved+" novos conhecimentos guardados automaticamente.";
+   await loadLearning();
+ }catch(err){$("#learnFeedback").textContent=err.message}
+ finally{btn.disabled=false}
+};
