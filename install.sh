@@ -17,15 +17,20 @@ install -d -m 755 /opt/nord-ai/server /opt/nord-ai/web
 install -m 644 "$SOURCE/server/main.py" /opt/nord-ai/server/main.py
 install -m 644 "$SOURCE/web/index.html" "$SOURCE/web/style.css" "$SOURCE/web/app.js" /opt/nord-ai/web/
 chown -R root:root /opt/nord-ai
-echo "[3/6] Credenciais"
+echo "[3/6] Rede local e credenciais"
+LAN_IP="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)' | head -n 1 || true)"
+if [ -z "$LAN_IP" ]; then LAN_IP="127.0.0.1"; echo "Sem IP de LAN privada; serviço local."; fi
 if [ ! -f /etc/nord-ai.env ]; then
  PASSWORD="$(openssl rand -hex 18)"
- printf 'NORD_PASSWORD=%s\nNORD_HOST=127.0.0.1\nNORD_PORT=8787\nNORD_DATA=/var/lib/nord-ai\n' "$PASSWORD" > /etc/nord-ai.env
+ printf 'NORD_PASSWORD=%s\nNORD_HOST=%s\nNORD_PORT=8787\nNORD_DATA=/var/lib/nord-ai\n' "$PASSWORD" "$LAN_IP" > /etc/nord-ai.env
  chmod 600 /etc/nord-ai.env
  echo "PALAVRA-PASSE NORD AI: $PASSWORD"
  echo "Guarda-a num local seguro; também existe em /etc/nord-ai.env (root)."
 else
  echo "A manter a palavra-passe existente em /etc/nord-ai.env."
+ if [ "$LAN_IP" != "127.0.0.1" ]; then
+   sed -i "s/^NORD_HOST=127[.]0[.]0[.]1$/NORD_HOST=$LAN_IP/" /etc/nord-ai.env
+ fi
 fi
 echo "[4/6] Motor Ollama"
 if ! command -v ollama >/dev/null 2>&1; then
@@ -83,6 +88,8 @@ systemctl restart nord-ai
 echo
 echo "Nord AI instalado."
 echo "Estado: systemctl status nord-ai"
-echo "Acesso remoto seguro através de túnel SSH:"
-echo "  ssh -L 8787:127.0.0.1:8787 UTILIZADOR@IP_DA_VM"
-echo "Depois abre http://127.0.0.1:8787 no teu browser."
+ACTIVE_IP="$(sed -n 's/^NORD_HOST=//p' /etc/nord-ai.env | tail -n 1)"
+echo "Interface: http://$ACTIVE_IP:8787"
+echo "Autoriza TCP 8787 apenas da sub-rede LAN na firewall, se necessário."
+echo "Ollama continua restrito a 127.0.0.1:11434."
+echo "Não configures port forwarding no router."
