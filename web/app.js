@@ -50,3 +50,47 @@ $("#learnForm").onsubmit=async e=>{
  }catch(err){$("#learnFeedback").textContent=err.message}
  finally{btn.disabled=false}
 };
+
+async function loadEvolution(){
+ const x=await api("evolution");
+ $("#evoSummary").textContent=x.examples+" correções guardadas · modelo ativo: "+x.active;
+ const versions=$("#evoVersions");versions.replaceChildren();
+ const all=[{model:x.base,status:x.active===x.base?"active":"base"},...x.versions];
+ const seen=new Set();
+ for(const v of all){
+  if(seen.has(v.model))continue;seen.add(v.model);
+  const row=document.createElement("div");row.className="model-row";
+  const label=document.createElement("strong");label.textContent=v.model+" · "+(v.model===x.active?"Ativo":v.status);
+  row.append(label);
+  if(v.model!==x.active){
+   const btn=document.createElement("button");btn.textContent="Ativar / rollback";
+   btn.onclick=async()=>{if(!confirm("Ativar "+v.model+"?"))return;try{await api("evolution/activate",{model:v.model});await loadEvolution();await loadModels()}catch(err){$("#evoFeedback").textContent=err.message}};
+   row.append(btn);
+  }versions.append(row);
+ }
+ const box=$("#evoExamples");box.replaceChildren();
+ for(const ex of x.examples_list){
+  const row=document.createElement("div");row.className="learn-item";
+  const title=document.createElement("strong");title.textContent=ex.prompt;
+  const answer=document.createElement("p");answer.textContent=ex.correction;
+  const remove=document.createElement("button");remove.className="ghost";remove.textContent="Remover";
+  remove.onclick=async()=>{try{await api("evolution/delete",{id:ex.id});await loadEvolution()}catch(err){alert(err.message)}};
+  row.append(title,answer,remove);box.append(row);
+ }
+ if(!x.examples_list.length)box.textContent="Ainda não existem correções.";
+}
+$("#evolutionBtn").onclick=()=>{$("#evoPanel").classList.remove("hidden");$(".sidebar").classList.remove("open");loadEvolution().catch(e=>$("#evoFeedback").textContent=e.message)};
+$("#closeEvo").onclick=()=>$("#evoPanel").classList.add("hidden");
+$("#evoPanel").onclick=e=>{if(e.target===$("#evoPanel"))$("#evoPanel").classList.add("hidden")};
+$("#evoForm").onsubmit=async e=>{
+ e.preventDefault();try{await api("evolution/correction",{prompt:$("#evoPrompt").value,correction:$("#evoCorrection").value});
+ $("#evoPrompt").value="";$("#evoCorrection").value="";$("#evoFeedback").textContent="Correção guardada.";await loadEvolution()
+ }catch(err){$("#evoFeedback").textContent=err.message}
+};
+$("#exportDataset").onclick=async()=>{
+ try{const data=await api("evolution/dataset");
+ const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+ const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="nord-evolution-dataset.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ $("#evoFeedback").textContent="Dataset exportado com "+data.examples.length+" exemplos."
+ }catch(e){$("#evoFeedback").textContent=e.message}
+};
