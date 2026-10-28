@@ -12,13 +12,25 @@ sudo bash install.sh
 
 O instalador instala Python, Ollama, descarrega `gemma3:270m`, cria o serviço `nord-ai` e gera credenciais em `/etc/nord-ai.env`. **Guarda a palavra-passe apresentada pelo instalador.**
 
-Por segurança a interface fica ligada a `127.0.0.1:8787`. Do teu computador, cria um túnel SSH:
+## Acesso pela rede local
 
-```bash
-ssh -L 8787:127.0.0.1:8787 UTILIZADOR@IP_DA_VM
+O instalador deteta um IP privado da VM (exemplo `192.168.1.50`) e liga o painel a esse endereço, na porta **8787**. Num telemóvel ou computador com acesso à mesma LAN, abre:
+
+```text
+http://192.168.1.50:8787
 ```
 
-Depois abre `http://127.0.0.1:8787`. Para acesso remoto permanente, configura um reverse proxy HTTPS autenticado; não exponhas a API do Ollama na Internet.
+Substitui pelo IP mostrado pelo instalador. A API do Ollama continua apenas em `127.0.0.1:11434`.
+
+Se a firewall UFW estiver ativa, autoriza somente a tua sub-rede (exemplo, adaptar à tua rede):
+
+```bash
+sudo ufw allow from 192.168.1.0/24 to any port 8787 proto tcp
+```
+
+Se o instalador não encontrar IP privado, mantém `127.0.0.1`. Para consultar o endereço: `hostname -I`. Para atualizar uma instalação existente, executa `git pull && sudo bash install.sh` (a palavra-passe existente é mantida).
+
+**Não abras a porta 8787 na Internet, em port forwarding, ou em regras de firewall de cloud que aceitem todo o mundo.** O login em HTTP na LAN não é encriptado; para redes com dispositivos não confiáveis ou acesso remoto, instala HTTPS com reverse proxy ou VPN (ex.: WireGuard/Tailscale). Se a VM for uma VPS sem ligação à tua LAN, um IP privado da VPS não significa que seja acessível pela rede de casa: precisas de VPN.
 
 ## Funções
 - Login obrigatório, sessão em cookie HttpOnly SameSite=Strict
