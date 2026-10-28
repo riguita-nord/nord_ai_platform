@@ -13,6 +13,7 @@ import time
 import urllib.error
 import urllib.request
 import learning
+import evolution
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -37,6 +38,7 @@ def database():
     con.execute("CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, created INTEGER NOT NULL)")
     con.execute("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL)")
     learning.init(con)
+    evolution.init(con)
     con.commit()
     return con
 
@@ -103,6 +105,13 @@ class Handler(BaseHTTPRequestHandler):
         if path=="/api/me": return self.send(200,{"authenticated":self.user()})
         if path.startswith("/api/"):
             if not self.guard(): return
+            if path=="/api/evolution":
+                with database() as db:
+                    return self.send(200,{**evolution.overview(db),"examples_list":evolution.examples(db)})
+            if path=="/api/evolution/dataset":
+                with database() as db:
+                    data=evolution.dataset(db)
+                return self.send(200,{"sha256":evolution.digest(data),"examples":data})
             if path=="/api/learning":
                 with database() as db:
                     return self.send(200,{"topics":learning.TOPICS,"periodic":False,"approval":"automatic","items":learning.listing(db)})
@@ -165,6 +174,31 @@ class Handler(BaseHTTPRequestHandler):
                 with ollama("/api/delete",{"name":name}) as response: response.read()
                 return self.send(200,{"ok":True})
             except Exception as e: return self.send(500,{"error":str(e)})
+        if path=="/api/evolution/correction":
+            try:
+                with database() as db: evolution.add(db,obj.get("prompt",""),obj.get("correction",""))
+                return self.send(200,{"ok":True})
+            except ValueError as e: return self.send(400,{"error":str(e)})
+        if path=="/api/evolution/delete":
+            try:
+                with database() as db: evolution.remove(db,obj.get("id"))
+                return self.send(200,{"ok":True})
+            except (ValueError,TypeError) as e: return self.send(400,{"error":str(e)})
+        if path=="/api/evolution/register":
+            try:
+                name=obj.get("model")
+                if name not in installed(): return self.send(400,{"error":"Instala a versão treinada primeiro no Ollama"})
+                with database() as db:
+                    vid=evolution.register(db,name,obj.get("parent"),obj.get("dataset_sha"),obj.get("score"),obj.get("baseline"))
+                return self.send(200,{"id":vid})
+            except (ValueError,TypeError) as e: return self.send(400,{"error":str(e)})
+        if path=="/api/evolution/activate":
+            if not lock.acquire(blocking=False): return self.send(429,{"error":"Modelo ocupado"})
+            try:
+                with database() as db: old=evolution.switch(db,obj.get("model"),installed())
+                return self.send(200,{"ok":True,"previous":old})
+            except ValueError as e:return self.send(400,{"error":str(e)})
+            finally: lock.release()
         if path=="/api/learning/search":
             try:
                 results=learning.discover(obj.get("query",""),obj.get("topic",""))
@@ -182,7 +216,9 @@ class Handler(BaseHTTPRequestHandler):
     def chat(self,obj):
         model=obj.get("model"); prompt=str(obj.get("prompt","")).strip()[:4000]
         cid=obj.get("conversation_id")
-        if model not in ALLOW or not prompt: return self.send(400,{"error":"Pedido inválido"})
+        with database() as db:
+            allowed=ALLOW | {x["model"] for x in evolution.overview(db)["versions"]}
+        if model not in allowed or not prompt: return self.send(400,{"error":"Pedido inválido"})
         try:
             if model not in installed(): return self.send(400,{"error":"Instala primeiro o modelo"})
         except Exception as e: return self.send(503,{"error":str(e)})
