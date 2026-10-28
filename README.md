@@ -62,3 +62,31 @@ sudo systemctl restart nord-ai
 ```
 
 Licença: uso interno Nord-Lab.
+
+## Nord Learning Center (v1.1)
+
+No menu lateral abre **Learning Center**. Escolhe uma das áreas **Programação, Inteligência artificial, Tecnologia, Ciência, Escrita criativa, FiveM / QBCore** e pesquisa um assunto. A pesquisa é **exclusivamente manual**, nunca agendada. A aprovação está configurada como **automática**: conteúdos retornados pela fonte permitida ficam disponíveis na memória logo após a pesquisa. Podes remover cada registo pelo painel.
+
+- Fonte inicial estritamente autorizada: API HTTPS da Wikipédia em português (até cinco resultados por pesquisa). Isto NÃO é pesquisa livre por toda a Internet. FiveM/QBCore e outros temas técnicos podem ter cobertura limitada.
+- Consulta com prazo de 8 segundos, limite de 100 KB de resposta, excertos de 2800 caracteres e máximo de 800 registos.
+- URLs não são fornecidos pelo cliente ao fetch remoto; não são aceites redirecionamentos; não existe crawler ou execução de código externo.
+- A biblioteca usa **SQLite FTS5**, com excertos aprovados automaticamente e referências recuperáveis em conversas futuras.
+- Fontes são dados não fiáveis: o chat recebe aviso para nunca obedecer a instruções incluídas nas fontes. **A revisão automática não garante veracidade** nem aumenta a inteligência do modelo; avalia cuidadosamente o conteúdo antes de o usar.
+- O motor usa no máximo um pedido de pesquisa externo simultâneo. Não há processos recorrentes nem treino dos pesos.
+
+### Atualização da VM
+
+```bash
+cd nord_ai_platform
+git pull
+sudo bash install.sh
+sudo systemctl status nord-ai
+```
+
+O instalador copia `server/learning.py`, atualiza o frontend e reinicia o serviço. Mantém a palavra-passe existente.
+
+### Verificar a funcionalidade
+
+Abre Learning Center, pesquisa **Python** na área Programação, confirma um resultado com ligação à fonte e depois faz uma pergunta sobre esse assunto no chat. Consulta os logs: `sudo journalctl -u nord-ai -n 80 --no-pager`.
+
+**Segurança da rede:** HTTP na LAN não cifra palavras-passe. Não abras portas na Internet pública; considera HTTPS ou VPN numa rede com equipamentos não confiáveis.
