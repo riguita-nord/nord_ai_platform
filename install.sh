@@ -20,6 +20,16 @@ if ! command -v chromium >/dev/null 2>&1 && ! command -v chromium-browser >/dev/
     echo "Aviso: Chromium indisponível nos repositórios; o leitor headless exigirá instalação manual." >&2
   fi
 fi
+# Chromium fornecido por Snap pode não arrancar sob o utilizador nordai
+# quando o serviço systemd tem ProtectHome=true e um HOME não convencional.
+CHROMIUM_BIN="$(command -v chromium || command -v chromium-browser || true)"
+if [ -n "$CHROMIUM_BIN" ]; then
+  case "$(readlink -f "$CHROMIUM_BIN" 2>/dev/null || true)" in
+    /snap/*|/usr/bin/snap)
+      echo "AVISO: Chromium usa Snap. Se aparecer código 46, verifica stderr no monitor e journalctl." >&2
+      ;;
+  esac
+fi
 echo "[2/6] Conta e diretórios"
 if ! id nordai >/dev/null 2>&1; then useradd --system --home /var/lib/nord-ai --shell /usr/sbin/nologin nordai; fi
 install -d -m 750 -o nordai -g nordai /var/lib/nord-ai
