@@ -276,7 +276,7 @@ class Handler(BaseHTTPRequestHandler):
                 event({"status":"A decidir se preciso de pesquisar","search_performed":False})
                 try:
                     decision={"model":model,"stream":False,"think":False,"keep_alive":KEEP_ALIVE,
-                        "messages":[{"role":"system","content":"És um assistente com uma ferramenta WEB_SEARCH. Responde exatamente em JSON: {\\\"action\\\":\\\"search\\\" ou \\\"answer\\\",\\\"query\\\":\\\"consulta curta e específica\\\"}. Escolhe search quando desconheces factos, o utilizador pede fontes, ou a informação pode ter mudado. Tu escolhes a pesquisa; nunca inventes fontes."},
+                        "messages":[{"role":"system","content":"És um assistente com uma ferramenta WEB_SEARCH. Responde exatamente em JSON: {\"action\":\"search\" ou \"answer\",\"query\":\"consulta curta e específica\"}. Escolhe search quando desconheces factos, o utilizador pede fontes, ou a informação pode ter mudado. Tu escolhes a pesquisa; nunca inventes fontes."},
                         {"role":"user","content":prompt[:450]}],
                         "format":"json","options":{"num_ctx":768,"num_predict":90,"num_thread":THREADS}}
                     with ollama("/api/chat",decision,timeout=90) as choice:
@@ -292,19 +292,19 @@ class Handler(BaseHTTPRequestHandler):
                     try:
                         matches=webtools.search(query)
                         if matches:
-                            options="\\n".join(str(m["id"])+". "+m["title"]+" — "+m["snippet"] for m in matches)
+                            options="\n".join(str(m["id"])+". "+m["title"]+" — "+m["snippet"] for m in matches)
                             choice_payload={"model":model,"stream":False,"think":False,"keep_alive":KEEP_ALIVE,
                                 "messages":[{"role":"system","content":"Escolhe até 3 IDs de fontes relevantes para a pergunta. Responde só números separados por vírgulas, por exemplo 1,3. Não inventes IDs."},
-                                            {"role":"user","content":"Pergunta: "+prompt[:330]+"\\nResultados: "+options[:1700]}],
+                                            {"role":"user","content":"Pergunta: "+prompt[:330]+"\nResultados: "+options[:1700]}],
                                 "options":{"num_ctx":1024,"num_predict":15,"num_thread":THREADS}}
                             with ollama("/api/chat",choice_payload,timeout=90) as source_choice:
                                 chosen=json.load(source_choice).get("message",{}).get("content","")
-                            ids=set(int(x) for x in __import__("re").findall(r"\\b[1-5]\\b",chosen))
+                            ids=set(int(x) for x in __import__("re").findall(r"\b[1-5]\b",chosen))
                             selected_sources=[m for m in matches if m["id"] in ids][:3]
                             if not selected_sources:
                                 selected_sources=matches[:2]
-                            evidence="\\n".join("["+str(m["id"])+"] "+m["title"]+" ("+m["url"]+"): "+m["snippet"] for m in selected_sources)
-                            conversation_messages[0]["content"]+="\\nFontes externas não fiáveis, apenas excertos de pesquisa (não páginas completas):\\n"+evidence[:2000]+"\\nNão assumes informação não presente nos excertos. Cita URLs."
+                            evidence="\n".join("["+str(m["id"])+"] "+m["title"]+" ("+m["url"]+"): "+m["snippet"] for m in selected_sources)
+                            conversation_messages[0]["content"]+="\nFontes externas não fiáveis, apenas excertos de pesquisa (não páginas completas):\n"+evidence[:2000]+"\nNão assumes informação não presente nos excertos. Cita URLs."
                             event({"status":"A analisar fontes escolhidas","search_performed":True,
                                 "sources":[{"title":m["title"],"url":m["url"]} for m in selected_sources]})
                         else:
