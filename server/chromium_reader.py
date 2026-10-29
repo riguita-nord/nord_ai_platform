@@ -43,6 +43,7 @@ def render(source, on_snapshot=None):
     except Exception as exc:
         raise RuntimeError("Endereço/rede bloqueados: "+str(exc)[:140]) from exc
     binary=browser_path()
+    captured_png=None
     with tempfile.TemporaryDirectory(prefix="nord-chromium-") as profile:
         screenshot=Path(profile)/"capture.png"
         cmd=[
@@ -72,13 +73,10 @@ def render(source, on_snapshot=None):
             raise RuntimeError("Chromium terminou com código "+str(process.returncode)+((": "+detail) if detail else " (sem diagnóstico em stderr)"))
         if len(out)>1_500_000:
             raise RuntimeError("Página demasiado grande para o browser interno")
-    # The screenshot comes from the same Chrome process as the DOM.
-    if on_snapshot is not None and screenshot.exists():
-        try:
-            if screenshot.stat().st_size<=700000:
-                on_snapshot(base64.b64encode(screenshot.read_bytes()).decode("ascii"))
-        except Exception:
-            pass
+        if on_snapshot is not None and screenshot.exists() and screenshot.stat().st_size<=700000:
+            captured_png=base64.b64encode(screenshot.read_bytes()).decode("ascii")
+    if on_snapshot is not None and captured_png:
+        on_snapshot(captured_png)
     parser=VisibleText()
     parser.feed(out.decode("utf-8","replace"))
     extracted=re.sub(r"\s+"," ",unescape(" ".join(parser.parts))).strip()
@@ -119,6 +117,7 @@ def google_search(query,on_snapshot=None):
     # Separate bounded render for extracting links; Chromium is terminated on completion.
     webtools._public_https(url)
     binary=browser_path()
+    captured_google_png=None
     with tempfile.TemporaryDirectory(prefix="nord-google-") as profile:
         screenshot=Path(profile)/"capture.png"
         command=[binary,"--headless=new","--disable-gpu","--disable-dev-shm-usage",
@@ -136,6 +135,8 @@ def google_search(query,on_snapshot=None):
             raise RuntimeError("Pesquisa Google excedeu 75 segundos")
         if proc.returncode or len(data)>1_500_000:
             raise RuntimeError("Chromium não conseguiu obter resultados Google")
+        if on_snapshot and screenshot.exists() and screenshot.stat().st_size<=700000:
+            captured_google_png=base64.b64encode(screenshot.read_bytes()).decode("ascii")
     parsed=GoogleResults()
     parsed.feed(data.decode("utf-8","replace"))
     results=[]
@@ -156,9 +157,6 @@ def google_search(query,on_snapshot=None):
         results.append({"id":len(results)+1,"title":title[:160],"url":target[:650],
                         "snippet":"Resultado apresentado pelo Google"})
         if len(results)==6:break
-    if on_snapshot and screenshot.exists():
-        try:
-            if screenshot.stat().st_size<=700000:
-                on_snapshot(base64.b64encode(screenshot.read_bytes()).decode("ascii"))
-        except Exception:pass
+    if on_snapshot and captured_google_png:
+        on_snapshot(captured_google_png)
     return results
