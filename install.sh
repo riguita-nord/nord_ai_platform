@@ -10,26 +10,18 @@ SOURCE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "[1/6] Dependências do sistema"
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y python3 curl ca-certificates openssl
-echo "[Chromium] A verificar instalação..."
-if ! command -v chromium >/dev/null 2>&1 && ! command -v chromium-browser >/dev/null 2>&1; then
-  if apt-cache show chromium 2>/dev/null | grep -q '^Package: chromium$'; then
-    DEBIAN_FRONTEND=noninteractive apt-get install -y chromium
-  elif apt-cache show chromium-browser 2>/dev/null | grep -q '^Package: chromium-browser$'; then
-    DEBIAN_FRONTEND=noninteractive apt-get install -y chromium-browser
+echo "[Browser] A verificar Chrome nativo (sem Snap)..."
+if ! command -v google-chrome-stable >/dev/null 2>&1; then
+  if [ "$(dpkg --print-architecture)" = "amd64" ]; then
+    echo "[Browser] A instalar pacote oficial Google Chrome .deb para amd64"
+    curl --fail --location --show-error --silent --retry 2 --connect-timeout 15 \
+      https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+      -o /tmp/nord-google-chrome.deb
+    DEBIAN_FRONTEND=noninteractive apt-get install -y /tmp/nord-google-chrome.deb
+    rm -f /tmp/nord-google-chrome.deb
   else
-    echo "Aviso: Chromium indisponível nos repositórios; o leitor headless exigirá instalação manual." >&2
+    echo "Aviso: arquitetura sem Chrome .deb amd64; não será utilizado o Chromium Snap." >&2
   fi
-fi
-# Chromium fornecido por Snap pode não arrancar sob o utilizador nordai
-# quando o serviço systemd tem ProtectHome=false
-# O Snap Chromium precisa de acesso a /run/user/<uid>; o diretório permanece 0700. e um HOME não convencional.
-CHROMIUM_BIN="$(command -v chromium || command -v chromium-browser || true)"
-if [ -n "$CHROMIUM_BIN" ]; then
-  case "$(readlink -f "$CHROMIUM_BIN" 2>/dev/null || true)" in
-    /snap/*|/usr/bin/snap)
-      echo "AVISO: Chromium usa Snap. Se aparecer código 46, verifica stderr no monitor e journalctl." >&2
-      ;;
-  esac
 fi
 echo "[2/6] Conta e diretórios"
 if ! id nordai >/dev/null 2>&1; then useradd --system --home /var/lib/nord-ai --shell /usr/sbin/nologin nordai; fi
@@ -99,20 +91,13 @@ Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
 ProtectSystem=strict
-ProtectHome=false
+ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/var/lib/nord-ai /run/user
+ReadWritePaths=/var/lib/nord-ai
 MemoryMax=600M
 [Install]
 WantedBy=multi-user.target
 EOF
-# O Chromium Snap exige XDG_RUNTIME_DIR=/run/user/<uid> gravável pelo utilizador.
-# Criar apenas o diretório do serviço, sem alterar permissões de /run/user.
-NORD_UID="$(id -u nordai)"
-if [ -z "$NORD_UID" ]; then echo "Utilizador nordai inexistente" >&2; exit 1; fi
-sed -i "/^ExecStart=/i Environment=XDG_RUNTIME_DIR=/run/user/$NORD_UID" /etc/systemd/system/nord-ai.service
-sed -i "/^ExecStart=/i ExecStartPre=+/usr/bin/install -d -m 0700 -o nordai -g nordai /run/user/$NORD_UID" /etc/systemd/system/nord-ai.service
-echo "[Chromium] XDG_RUNTIME_DIR configurado para /run/user/$NORD_UID"
 systemctl daemon-reload
 systemctl enable --now ollama
 systemctl restart ollama
