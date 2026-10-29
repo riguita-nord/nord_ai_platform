@@ -2,3 +2,16 @@
 .learn-dialog{width:min(720px,100%);max-height:88dvh;display:flex;flex-direction:column}.learn-dialog .dialog-body{overflow-y:auto}.learn-field{background:#222633;color:#f4f5f8;border:1px solid #414656;border-radius:9px;padding:11px;width:100%;margin:5px 0 14px}.learn-items{display:flex;flex-direction:column;gap:10px}.learn-item{border:1px solid var(--border);border-radius:10px;padding:14px}.learn-item p{font-size:12px;margin:8px 0}.learn-item a{font-size:12px;color:#aaa2ff}.learn-item .ghost{padding:4px 8px;color:#ffb5b5}.learn-item strong{overflow-wrap:anywhere;max-width:80%}
 
 .activity-status{max-width:800px;margin:0 auto 9px;color:#a69cf6;font-size:12px;min-height:20px;padding:0 5px;transition:opacity .2s}.activity-status:not(.hidden){animation:status-in .18s ease-out}@keyframes status-in{from{opacity:.2;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+
+.activity-panel{width:390px;max-width:40vw;flex:none;background:#10131b;border-left:1px solid #303547;display:flex;flex-direction:column;min-height:0;padding:15px;gap:12px}
+.activity-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.activity-sub{color:#949bad;font-size:11px}
+.activity-log{min-height:130px;max-height:35%;overflow-y:auto;border:1px solid #313748;background:#090c13;border-radius:11px;padding:12px;font:11px/1.7 Consolas,monospace;color:#a3e2bf;overflow-wrap:anywhere}
+.activity-log>div{padding:4px 0;border-bottom:1px solid #1d2830}
+.browser-head{display:flex;justify-content:space-between;gap:8px;font-size:12px}
+.browser-head span{color:#a79afb;font-size:9px;letter-spacing:1px}
+.browser-capture{background:#090b11;border:1px solid #34394c;border-radius:11px;min-height:160px;flex:1;display:flex;align-items:center;justify-content:center;overflow:auto}
+.browser-capture img{width:100%;height:auto;max-height:100%;object-fit:contain;pointer-events:none;user-select:none}
+.browser-capture p{font-size:12px;color:#7f899b;padding:16px;text-align:center}
+.browser-address{font:11px Consolas,monospace;color:#9da5b5;overflow-wrap:anywhere;max-height:64px;overflow-y:auto}
+@media(max-width:1100px){.activity-panel{position:fixed;right:0;top:0;bottom:0;width:min(420px,92vw);max-width:none;z-index:8;box-shadow:-25px 0 50px #0008}}
