@@ -21,7 +21,8 @@ if ! command -v chromium >/dev/null 2>&1 && ! command -v chromium-browser >/dev/
   fi
 fi
 # Chromium fornecido por Snap pode não arrancar sob o utilizador nordai
-# quando o serviço systemd tem ProtectHome=true e um HOME não convencional.
+# quando o serviço systemd tem ProtectHome=false
+# O Snap Chromium precisa de acesso a /run/user/<uid>; o diretório permanece 0700. e um HOME não convencional.
 CHROMIUM_BIN="$(command -v chromium || command -v chromium-browser || true)"
 if [ -n "$CHROMIUM_BIN" ]; then
   case "$(readlink -f "$CHROMIUM_BIN" 2>/dev/null || true)" in
@@ -100,8 +101,8 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/var/lib/nord-ai
-MemoryMax=180M
+ReadWritePaths=/var/lib/nord-ai /run/user
+MemoryMax=600M
 [Install]
 WantedBy=multi-user.target
 EOF
