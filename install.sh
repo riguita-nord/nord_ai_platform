@@ -22,7 +22,7 @@ LAN_IP="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^(10\.|192\.168\.|172
 if [ -z "$LAN_IP" ]; then LAN_IP="127.0.0.1"; echo "Sem IP de LAN privada; serviço local."; fi
 if [ ! -f /etc/nord-ai.env ]; then
  PASSWORD="$(openssl rand -hex 18)"
- printf 'NORD_PASSWORD=%s\nNORD_HOST=%s\nNORD_PORT=8787\nNORD_DATA=/var/lib/nord-ai\nNORD_PREFERRED_MODEL=qwen3:0.6b\nNORD_CONTEXT=1024\nNORD_TOKENS_FAST=160\nNORD_TOKENS_ANALYSIS=256\nNORD_THREADS=1\nNORD_KEEP_ALIVE=30s\n' "$PASSWORD" "$LAN_IP" > /etc/nord-ai.env
+ printf 'NORD_PASSWORD=%s\nNORD_HOST=%s\nNORD_PORT=8787\nNORD_DATA=/var/lib/nord-ai\nNORD_PREFERRED_MODEL=qwen3:0.6b\nNORD_CONTEXT=2048\nNORD_TOKENS_FAST=160\nNORD_TOKENS_ANALYSIS=512\nNORD_THREADS=1\nNORD_KEEP_ALIVE=30s\n' "$PASSWORD" "$LAN_IP" > /etc/nord-ai.env
  chmod 600 /etc/nord-ai.env
  echo "PALAVRA-PASSE NORD AI: $PASSWORD"
  echo "Guarda-a num local seguro; também existe em /etc/nord-ai.env (root)."
@@ -33,10 +33,17 @@ else
  fi
 fi
 # Anexa defaults sem alterar definições escolhidas pelo administrador.
-for entry in NORD_PREFERRED_MODEL=qwen3:0.6b NORD_CONTEXT=1024 NORD_TOKENS_FAST=160 NORD_TOKENS_ANALYSIS=256 NORD_THREADS=1 NORD_KEEP_ALIVE=30s; do
+for entry in NORD_PREFERRED_MODEL=qwen3:0.6b NORD_CONTEXT=2048 NORD_TOKENS_FAST=160 NORD_TOKENS_ANALYSIS=512 NORD_THREADS=1 NORD_KEEP_ALIVE=30s; do
  key="${entry%%=*}"
  if ! grep -q "^${key}=" /etc/nord-ai.env; then printf '%s\n' "$entry" >> /etc/nord-ai.env; fi
 done
+# Atualiza o perfil anterior sem substituir personalizações do administrador.
+if grep -qx 'NORD_CONTEXT=1024' /etc/nord-ai.env; then
+ sed -i 's/^NORD_CONTEXT=1024$/NORD_CONTEXT=2048/' /etc/nord-ai.env
+fi
+if grep -qx 'NORD_TOKENS_ANALYSIS=256' /etc/nord-ai.env; then
+ sed -i 's/^NORD_TOKENS_ANALYSIS=256$/NORD_TOKENS_ANALYSIS=512/' /etc/nord-ai.env
+fi
 echo "[4/6] Motor Ollama"
 if ! command -v ollama >/dev/null 2>&1; then
  curl -fsSL https://ollama.com/install.sh -o /tmp/nord-ollama-install.sh
@@ -49,7 +56,7 @@ cat > /etc/systemd/system/ollama.service.d/nord-limits.conf <<'EOF'
 Environment="OLLAMA_HOST=127.0.0.1:11434"
 Environment="OLLAMA_NUM_PARALLEL=1"
 Environment="OLLAMA_MAX_LOADED_MODELS=1"
-Environment="OLLAMA_CONTEXT_LENGTH=1024"
+Environment="OLLAMA_CONTEXT_LENGTH=2048"
 Environment="OLLAMA_KEEP_ALIVE=30s"
 MemoryMax=1500M
 EOF
@@ -80,6 +87,7 @@ WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
 systemctl enable --now ollama
+systemctl restart ollama
 for i in $(seq 1 30); do
  if curl -fsS http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then break; fi
  sleep 2
