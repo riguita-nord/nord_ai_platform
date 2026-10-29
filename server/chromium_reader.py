@@ -31,10 +31,10 @@ class VisibleText(HTMLParser):
             self.parts.append(data)
 
 def browser_path():
-    for name in ("chromium","chromium-browser"):
+    for name in ("google-chrome-stable","google-chrome","chromium","chromium-browser"):
         cmd=shutil.which(name)
-        if cmd:return cmd
-    raise RuntimeError("Chromium não está instalado. Executa sudo bash install.sh.")
+        if cmd and os.path.realpath(cmd)!="/usr/bin/snap":return cmd
+    raise RuntimeError("Browser nativo não instalado; Chromium Snap não é compatível com o confinamento atual. Executa sudo bash install.sh.")
 
 def render(source, on_snapshot=None):
     url=source["url"]
