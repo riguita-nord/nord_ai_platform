@@ -113,3 +113,12 @@ O chat agora mostra indicadores reais (`A preparar resposta`, `A consultar memó
 Se o Ollama comunicar `done_reason=length`, o servidor tenta continuar a geração até mais duas vezes, sem repetir o prefixo. Se continuar incompleta ou o fluxo terminar sem confirmação, a interface informa em vez de simular que terminou. A quantidade de tokens e o contexto continuam configuráveis em `/etc/nord-ai.env`. Com 2 GB e 1 vCPU as continuações podem ser lentas; não são uma garantia de completar qualquer resposta.
 
 Para aplicar: `git pull && sudo bash install.sh`; atualiza a página com Ctrl+F5.
+
+## Correção de streaming e pesquisa automática (29/10/2026)
+
+- Corrigida a serialização NDJSON: cada evento do chat termina agora com uma mudança de linha real (antes eram os caracteres literais `\\n`, causando erro de JSON no browser).
+- Antes da resposta, o Qwen3 0.6B pode decidir entre `WEB` e `LOCAL` numa consulta curta. Apenas quando decide `WEB` é executada uma pesquisa.
+- A pesquisa nesta versão consulta **somente a API pública da Wikipédia em português**, via `learning.discover`, com os limites de origem, tamanho, tempo e número de resultados já definidos. Não é ainda um motor de pesquisa geral.
+- O estado exibido no chat distingue preparação, decisão de pesquisa, pesquisa real, análise das fontes, resposta e continuação. Não apresenta pesquisa quando nenhuma aconteceu.
+- Se a fonte falhar, o modelo continua a responder com as limitações indicadas. A decisão automática de pesquisar e a qualidade das fontes não são garantidas num modelo de 0.6B.
+- Para atualizar: `cd nord_ai_platform && git pull && sudo bash install.sh`. Recarrega a página com Ctrl+F5.
