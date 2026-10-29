@@ -160,3 +160,17 @@ O Nord AI dispõe agora de um Chromium headless que só arranca quando o utiliza
 **Atenção à VM de 2 GB:** o Chromium é pesado e pode causar OOM. Este perfil é experimental. Para estabilidade, reserva mais RAM ou migra o browser para outro servidor. O navegador recebe links externos não fiáveis e pode carregar sub-recursos de terceiros; validação de URL e sandbox não substituem firewall de saída com bloqueio de redes privadas e de metadados de cloud. Evita abrir URLs confidenciais. Em algumas versões do Ubuntu o Chromium via Snap não funciona dentro do serviço systemd; Debian com pacote Chromium nativo é a opção mais previsível.
 
 Instala/atualiza: `cd nord_ai_platform && git pull && sudo bash install.sh`. Para diagnosticar: `sudo journalctl -u nord-ai -n 100 --no-pager`.
+
+## Intelligent Knowledge Router — pesquisa contextual e memória
+
+O módulo `server/knowledge_router.py` mantém no SQLite uma cache de até 250 investigações com excertos de **páginas efetivamente lidas**, URLs, data da consulta e validade. Não guarda uma resposta inventada como se fosse fonte. O router tenta reutilizar evidências para perguntas repetidas, sem abrir novamente o Chromium se o registo ainda estiver válido; pedidos explícitos de pesquisa e factos recentes têm prioridade sobre a cache.
+
+- Factos com sinais de atualidade: validade **1 hora**.
+- Outros assuntos investigados: validade **14 dias** (heurística, não garantia de precisão).
+- Explicações gerais, escrita e tarefas criativas: podem ser respondidas localmente.
+- Necessidades de informação externa: Qwen escolhe pesquisar, até duas consultas, renderiza no máximo duas fontes e apresenta as URLs.
+- Erros ou conteúdo insuficiente: deve comunicar a limitação, não inventar fontes.
+
+**Limitações reais:** o Qwen3 0.6B não consegue avaliar a própria confiança com a precisão de modelos grandes. Os excertos de páginas não são uma verificação independente dos factos e a cache faz correspondência lexical normalizada, não pesquisa semântica completa. Não é equivalente à capacidade de pesquisa do ChatGPT. As quotas, a validade das fontes e a qualidade da decisão precisam de testes reais na VM.
+
+Atualiza com `git pull && bash -n install.sh && sudo bash install.sh`. Verifica os logs com `sudo journalctl -u nord-ai -n 100 --no-pager`.
