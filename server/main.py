@@ -275,7 +275,7 @@ class Handler(BaseHTTPRequestHandler):
             search_done=False
             # Links fornecidos no chat são abertos pelo leitor web interno, sem interface visual.
             direct_links=[]
-            for candidate in re.findall(r"https?://[^\\s<>\\\"']+",prompt):
+            for candidate in re.findall(r"https?://[^\s<>\"']+",prompt):
                 candidate=candidate.rstrip(".,;!?)]}")
                 if candidate not in direct_links:direct_links.append(candidate)
                 if len(direct_links)>=2:break
