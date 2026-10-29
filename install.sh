@@ -109,7 +109,8 @@ EOF
 # Criar apenas o diretório do serviço, sem alterar permissões de /run/user.
 NORD_UID="$(id -u nordai)"
 if [ -z "$NORD_UID" ]; then echo "Utilizador nordai inexistente" >&2; exit 1; fi
-sed -i "/^ExecStart=\/usr\/bin\/python3/i Environment=XDG_RUNTIME_DIR=/run/user/$NORD_UID\nExecStartPre=+/usr/bin/install -d -m 0700 -o nordai -g nordai /run/user/$NORD_UID" /etc/systemd/system/nord-ai.service
+sed -i "/^ExecStart=/i Environment=XDG_RUNTIME_DIR=/run/user/$NORD_UID" /etc/systemd/system/nord-ai.service
+sed -i "/^ExecStart=/i ExecStartPre=+/usr/bin/install -d -m 0700 -o nordai -g nordai /run/user/$NORD_UID" /etc/systemd/system/nord-ai.service
 echo "[Chromium] XDG_RUNTIME_DIR configurado para /run/user/$NORD_UID"
 systemctl daemon-reload
 systemctl enable --now ollama
