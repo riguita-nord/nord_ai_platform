@@ -62,11 +62,11 @@ def render(source, on_snapshot=None):
                                  stderr=subprocess.PIPE,start_new_session=True)
         try:
             # Do not retain a complete arbitrarily large rendered page.
-            out,err=process.communicate(timeout=75)
+            out,err=process.communicate(timeout=20)
         except subprocess.TimeoutExpired:
             os.killpg(process.pid,signal.SIGKILL)
             process.communicate()
-            raise RuntimeError("O Chromium ultrapassou o limite de 75 segundos")
+            raise RuntimeError("O Chromium ultrapassou o limite de 20 segundos")
         if process.returncode:
             detail=(err or b"").decode("utf-8","replace").strip()
             detail=" | ".join(detail.splitlines()[-3:])[-380:]
@@ -128,11 +128,11 @@ def google_search(query,on_snapshot=None):
         proc=subprocess.Popen(command,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,
                               stderr=subprocess.DEVNULL,start_new_session=True)
         try:
-            data,_=proc.communicate(timeout=75)
+            data,_=proc.communicate(timeout=20)
         except subprocess.TimeoutExpired:
             os.killpg(proc.pid,signal.SIGKILL)
             proc.communicate()
-            raise RuntimeError("Pesquisa Google excedeu 75 segundos")
+            raise RuntimeError("Pesquisa Google excedeu 20 segundos")
         if proc.returncode or len(data)>1_500_000:
             raise RuntimeError("Chromium não conseguiu obter resultados Google")
         if on_snapshot and screenshot.exists() and screenshot.stat().st_size<=700000:
