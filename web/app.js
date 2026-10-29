@@ -18,7 +18,7 @@ async function send(){
  const indicator=$("#activityStatus");
  indicator.classList.remove("hidden");
  indicator.textContent="◌ A preparar resposta · Sem pesquisa na Internet";
- let full="",completed=false,sawDone=false;
+ let full="",completed=false,sawDone=false,searched=false;
  try{
   const res=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({model:selected,prompt,conversation_id:current})});
   if(!res.ok){const e=await res.json();throw Error(e.error||"Falha no chat")}
@@ -28,7 +28,9 @@ async function send(){
    const event=JSON.parse(line);
    if(event.conversation_id)current=event.conversation_id;
    if(event.error)throw Error(event.error);
-   if(event.status)indicator.textContent="◌ "+event.status+(event.search_performed?" · Pesquisa Web":" · Sem pesquisa na Internet");
+   if(event.search_performed)searched=true;
+   if(event.status)indicator.textContent="◌ "+event.status+(searched?" · Pesquisa Web":" · Sem pesquisa na Internet");
+   if(event.sources?.length){indicator.textContent="◌ Fontes encontradas: "+event.sources.map(s=>s.title).join(", ");}
    if(event.text){full+=event.text;el.textContent=full;$("#chat").scrollTop=$("#chat").scrollHeight}
    if(event.done){sawDone=true;completed=!!event.complete}
   };
@@ -41,8 +43,8 @@ async function send(){
   if(!full)el.textContent="O modelo não devolveu texto.";
   if(!sawDone||!completed){
    el.textContent+=(full?"\n\n":"")+"[Resposta interrompida. Podes pedir para continuar.]";
-   indicator.textContent="⚠ Resposta incompleta · Sem pesquisa na Internet";
-  }else indicator.textContent="✓ Resposta concluída · Sem pesquisa na Internet";
+   indicator.textContent="⚠ Resposta incompleta"+(searched?" · Pesquisa efetuada":" · Sem pesquisa");
+  }else indicator.textContent="✓ Resposta concluída"+(searched?" · Pesquisa efetuada":" · Sem pesquisa");
   await loadChats();
  }catch(e){
   el.textContent=(full?full+"\n\n":"")+"Erro: "+e.message;
