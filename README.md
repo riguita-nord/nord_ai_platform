@@ -105,3 +105,11 @@ NORD_KEEP_ALIVE=30s
 ```
 
 No futuro, quando migrares para uma máquina com GPU, poderás aumentar contexto/tokens e instalar outro modelo, sem mudar os pesos ou reescrever o chat. Os limites do **Ollama** são separados, no ficheiro `/etc/systemd/system/ollama.service.d/nord-limits.conf`: ajusta `MemoryMax`, `OLLAMA_CONTEXT_LENGTH`, `OLLAMA_NUM_PARALLEL` e `OLLAMA_MAX_LOADED_MODELS` conforme o hardware; depois executa `sudo systemctl daemon-reload && sudo systemctl restart ollama nord-ai`. O instalador atual é orientado para a VM de 2 GB e repõe esse perfil ao ser executado novamente.
+
+## Respostas interrompidas e estado de geração
+
+O chat agora mostra indicadores reais (`A preparar resposta`, `A consultar memória`, `A analisar`, `A responder`, `A continuar a resposta`). **Não existe pesquisa automática no chat nesta versão**, pelo que a indicação diz explicitamente `Sem pesquisa na Internet`; o Learning Center manual é separado.
+
+Se o Ollama comunicar `done_reason=length`, o servidor tenta continuar a geração até mais duas vezes, sem repetir o prefixo. Se continuar incompleta ou o fluxo terminar sem confirmação, a interface informa em vez de simular que terminou. A quantidade de tokens e o contexto continuam configuráveis em `/etc/nord-ai.env`. Com 2 GB e 1 vCPU as continuações podem ser lentas; não são uma garantia de completar qualquer resposta.
+
+Para aplicar: `git pull && sudo bash install.sh`; atualiza a página com Ctrl+F5.
