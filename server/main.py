@@ -274,7 +274,11 @@ class Handler(BaseHTTPRequestHandler):
             search_done=False
             forced_search=bool(re.search(r"\b(pesquis|investig|procura|fontes|atualiz|mais detalh|aprofund)",prompt.lower()))
             previous_questions=[row[1] for row in history if row[0]=="user"]
-            subject=previous_questions[-1] if previous_questions else prompt
+            followup=bool(re.search(r"^(faz isso|faz|continua|sim|aprofund|pesquisa|investiga|explica melhor)",prompt.lower().strip()))
+            if followup and any(re.search(r"pesquis|investig|fontes|mais detalh",q.lower()) for q in previous_questions[-2:]):
+                forced_search=True
+            meaningful=[q for q in previous_questions if not re.search(r"^(faz isso|faz|sim|pesquisa|investiga|mais detalh)",q.lower().strip())]
+            subject=meaningful[-1] if meaningful else (previous_questions[-1] if previous_questions else prompt)
             research_context=(subject+" | Pedido atual: "+prompt) if len(prompt.split())<12 and previous_questions else prompt
             if model.startswith("qwen3:"):
                 event({"status":"A decidir se preciso de pesquisar","search_performed":False})
