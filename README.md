@@ -174,3 +174,11 @@ O módulo `server/knowledge_router.py` mantém no SQLite uma cache de até 250 i
 **Limitações reais:** o Qwen3 0.6B não consegue avaliar a própria confiança com a precisão de modelos grandes. Os excertos de páginas não são uma verificação independente dos factos e a cache faz correspondência lexical normalizada, não pesquisa semântica completa. Não é equivalente à capacidade de pesquisa do ChatGPT. As quotas, a validade das fontes e a qualidade da decisão precisam de testes reais na VM.
 
 Atualiza com `git pull && bash -n install.sh && sudo bash install.sh`. Verifica os logs com `sudo journalctl -u nord-ai -n 100 --no-pager`.
+
+## Activity Monitor e Google com Chromium
+
+No topo do workspace, o botão **⌘ Atividade** abre um painel lateral com o registo de operações observáveis da IA e uma captura **apenas de leitura** da página atualmente visitada. Não são mostrados os pensamentos internos privados do modelo; o terminal apresenta decisões operacionais, pesquisas, fontes, erros e estados de geração. A captura é estática, não é uma sessão interativa, e não há teclado/cliques no Chromium a partir do painel.
+
+As investigações web gerais usam agora o **Google Search em Chromium headless**, em vez do Bing RSS: o modelo formula a consulta, Chromium renderiza a página de resultados, extrai links apresentados, o Qwen escolhe um resultado e Chromium abre-o para leitura. URLs e domínios já visitados são evitados dentro da investigação, incluindo a segunda tentativa. Algumas pesquisas no Google podem mostrar CAPTCHA, consentimento de cookies ou bloquear a automação: nesses casos o assistente deve indicar que não conseguiu consultar os resultados, nunca inventar uma fonte.
+
+Esta versão faz capturas num processo Chromium adicional, sequencial e limitado. **Numa VM de 2 GB pode ficar lenta ou falhar por memória**; utiliza o monitor apenas quando precisares de observar. O código está publicado mas carece de validação com Chromium real na VM. Atualiza com `git pull && bash -n install.sh && sudo bash install.sh`, seguido de `Ctrl+F5`.
