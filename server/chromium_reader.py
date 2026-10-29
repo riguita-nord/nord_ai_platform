@@ -75,22 +75,19 @@ def render(source, on_snapshot=None, on_progress=None):
         process=subprocess.Popen(cmd,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE,start_new_session=True)
         started=time.monotonic()
-        try:
-            while process.poll() is None:
+        while True:
+            try:
+                out,err=process.communicate(timeout=5)
+                if on_progress:on_progress("Chrome terminou em "+str(round(time.monotonic()-started,1))+"s")
+                break
+            except subprocess.TimeoutExpired:
                 elapsed=time.monotonic()-started
-                if elapsed>75:
+                if on_progress:
+                    on_progress("Chrome "+str(round(elapsed))+"s · "+_process_health(process.pid))
+                if elapsed>=75:
                     os.killpg(process.pid,signal.SIGKILL)
                     process.communicate()
-                    raise RuntimeError("Chrome bloqueado após 75s; último diagnóstico: "+_process_health(process.pid))
-                if on_progress and int(elapsed)%5==0 and int(elapsed)!=last_report:
-                    last_report=int(elapsed)
-                    on_progress("Chrome em execução há "+str(last_report)+"s · "+_process_health(process.pid))
-                time.sleep(0.5)
-            out,err=process.communicate(timeout=3)
-        except subprocess.TimeoutExpired:
-            os.killpg(process.pid,signal.SIGKILL)
-            process.communicate()
-            raise RuntimeError("Chrome não terminou de libertar os canais")
+                    raise RuntimeError("Chrome ultrapassou 75 segundos · "+_process_health(process.pid))
         if process.returncode:
             detail=(err or b"").decode("utf-8","replace").strip()
             detail=" | ".join(detail.splitlines()[-3:])[-380:]
