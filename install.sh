@@ -24,7 +24,7 @@ echo "[2/6] Conta e diretórios"
 if ! id nordai >/dev/null 2>&1; then useradd --system --home /var/lib/nord-ai --shell /usr/sbin/nologin nordai; fi
 install -d -m 750 -o nordai -g nordai /var/lib/nord-ai
 install -d -m 755 /opt/nord-ai/server /opt/nord-ai/web
-install -m 644 "$SOURCE/server/main.py" "$SOURCE/server/learning.py" "$SOURCE/server/evolution.py" "$SOURCE/server/webtools.py" "$SOURCE/server/chromium_reader.py" "$SOURCE/server/knowledge_router.py" /opt/nord-ai/server/
+install -m 644 "$SOURCE/server/main.py" "$SOURCE/server/learning.py" "$SOURCE/server/evolution.py" "$SOURCE/server/webtools.py" "$SOURCE/server/chromium_reader.py" "$SOURCE/server/knowledge_router.py" "$SOURCE/server/github_research.py" /opt/nord-ai/server/
 install -m 644 "$SOURCE/web/index.html" "$SOURCE/web/style.css" "$SOURCE/web/app.js" /opt/nord-ai/web/
 chown -R root:root /opt/nord-ai
 echo "[3/6] Rede local e credenciais"
