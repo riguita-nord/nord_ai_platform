@@ -13,7 +13,7 @@ from html import unescape
 from html.parser import HTMLParser
 
 MAX_SEARCH_BYTES=100_000
-MAX_PAGE_BYTES=90_000
+MAX_PAGE_BYTES=450_000
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):
