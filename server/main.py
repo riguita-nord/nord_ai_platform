@@ -319,7 +319,7 @@ class Handler(BaseHTTPRequestHandler):
                 for link in direct_links:
                     try:
                         event({"status":"A renderizar página: "+link[:90],"search_performed":True})
-                        page_text=chromium_reader.render({"url":link},on_snapshot=lambda png: event({"browser_snapshot":png,"browser_url":link}))
+                        page_text=chromium_reader.render({"url":link},on_snapshot=lambda png: event({"browser_snapshot":png,"browser_url":link}),on_progress=lambda status: event({"status":status,"search_performed":True}))
                         if len(page_text.strip())<80:
                             event({"status":"Página sem texto suficiente","search_performed":True})
                             continue
