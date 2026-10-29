@@ -8,11 +8,34 @@ async function openChat(id){current=id;$("#messages").replaceChildren();const j=
 function newChat(){current=null;$("#messages").replaceChildren();toggleWelcome();loadChats();$(".sidebar").classList.remove("open")}
 async function loadModels(){const j=await api("models");models=j.models;selected=models.includes(selected)?selected:(models.includes(j.preferred)?j.preferred:(models[0]||""));$("#modelSelect").replaceChildren();for(const m of models){const opt=document.createElement("option");opt.value=m;opt.textContent=m;$("#modelSelect").append(opt)}$("#modelSelect").value=selected;$("#modelCount").textContent=models.length+" instalado(s)";const box=$("#installedModels");box.replaceChildren();for(const m of models){const row=document.createElement("div");row.className="model-row";const label=document.createElement("strong");label.textContent="✳  "+m;const del=document.createElement("button");del.textContent="Remover";del.onclick=async()=>{if(!confirm("Remover "+m+"?"))return;try{await api("delete-model",{name:m});await loadModels()}catch(e){alert(e.message)}};row.append(label,del);box.append(row)}if(!models.length)box.textContent="Ainda não há modelos instalados."}
 async function watchJobs(){try{const j=await api("jobs");const jobs=Object.values(j.jobs);const latest=jobs.at(-1);if(latest){$("#jobStatus").textContent=latest.name+" — "+latest.status+(latest.percent===null||latest.percent===undefined?"":" ("+latest.percent+"%)");if(!latest.done){setTimeout(watchJobs,1300)}else{await loadModels()}}}catch(e){$("#jobStatus").textContent=e.message}}
+function activityLine(message){
+ const log=$("#activityLog");
+ const entry=document.createElement("div");
+ entry.textContent="["+new Date().toLocaleTimeString("pt-PT")+"] "+message;
+ log.append(entry);
+ while(log.children.length>90)log.firstChild.remove();
+ log.scrollTop=log.scrollHeight;
+}
+function activityReset(){
+ $("#activityLog").replaceChildren();
+ $("#browserPreview").classList.add("hidden");
+ $("#browserPreview").removeAttribute("src");
+ $("#browserEmpty").classList.remove("hidden");
+ $("#browserAddress").textContent="";
+ activityLine("Pedido recebido · monitor de operações iniciado");
+}
+function activityToggle(open){
+ $("#activityPanel").classList.toggle("hidden",!open);
+ $("#activityBtn").setAttribute("aria-expanded",String(open));
+}
+$("#activityBtn").onclick=()=>activityToggle($("#activityPanel").classList.contains("hidden"));
+$("#closeActivity").onclick=()=>activityToggle(false);
 async function send(){
  if(busy)return;
  const prompt=$("#prompt").value.trim();if(!prompt)return;
  if(!selected)return alert("Instala um modelo primeiro.");
  busy=true;$("#send").disabled=true;$("#prompt").value="";
+ activityReset();
  textNode("user",prompt);const el=textNode("assistant","");
  toggleWelcome();
  const indicator=$("#activityStatus");
@@ -29,10 +52,12 @@ async function send(){
    if(event.conversation_id)current=event.conversation_id;
    if(event.error)throw Error(event.error);
    if(event.search_performed)searched=true;
-   if(event.status)indicator.textContent="◌ "+event.status+(searched?" · Pesquisa Web":" · Sem pesquisa na Internet");
-   if(event.sources?.length){indicator.textContent="◌ Fontes encontradas: "+event.sources.map(s=>s.title).join(", ");}
+   if(event.status){indicator.textContent="◌ "+event.status+(searched?" · Pesquisa Web":" · Sem pesquisa na Internet");activityLine(event.status)}
+   if(event.sources?.length){indicator.textContent="◌ Fontes encontradas: "+event.sources.map(s=>s.title).join(", ");for(const source of event.sources)activityLine("Fonte: "+source.title+" · "+source.url)}
+   if(event.browser_snapshot){$("#browserPreview").src="data:image/png;base64,"+event.browser_snapshot;$("#browserPreview").classList.remove("hidden");$("#browserEmpty").classList.add("hidden");$("#browserAddress").textContent=event.browser_url||"";activityLine("Captura do Chromium recebida · apenas de leitura")}
+   if(event.error)activityLine("Erro: "+event.error);
    if(event.text){full+=event.text;el.textContent=full;$("#chat").scrollTop=$("#chat").scrollHeight}
-   if(event.done){sawDone=true;completed=!!event.complete}
+   if(event.done){sawDone=true;completed=!!event.complete;activityLine(completed?"Geração concluída":"Geração interrompida")}
   };
   while(true){
    const {done,value}=await reader.read();if(done)break;
@@ -47,6 +72,7 @@ async function send(){
   }else indicator.textContent="✓ Resposta concluída"+(searched?" · Pesquisa efetuada":" · Sem pesquisa");
   await loadChats();
  }catch(e){
+  activityLine("Falha: "+e.message);
   el.textContent=(full?full+"\n\n":"")+"Erro: "+e.message;
   indicator.textContent="⚠ Erro na geração";
  }finally{busy=false;$("#send").disabled=false;$("#prompt").focus()}
