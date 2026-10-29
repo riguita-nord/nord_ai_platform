@@ -14,7 +14,7 @@ echo "[2/6] Conta e diretórios"
 if ! id nordai >/dev/null 2>&1; then useradd --system --home /var/lib/nord-ai --shell /usr/sbin/nologin nordai; fi
 install -d -m 750 -o nordai -g nordai /var/lib/nord-ai
 install -d -m 755 /opt/nord-ai/server /opt/nord-ai/web
-install -m 644 "$SOURCE/server/main.py" "$SOURCE/server/learning.py" /opt/nord-ai/server/
+install -m 644 "$SOURCE/server/main.py" "$SOURCE/server/learning.py" "$SOURCE/server/evolution.py" /opt/nord-ai/server/
 install -m 644 "$SOURCE/web/index.html" "$SOURCE/web/style.css" "$SOURCE/web/app.js" /opt/nord-ai/web/
 chown -R root:root /opt/nord-ai
 echo "[3/6] Rede local e credenciais"
@@ -45,7 +45,7 @@ Environment="OLLAMA_HOST=127.0.0.1:11434"
 Environment="OLLAMA_NUM_PARALLEL=1"
 Environment="OLLAMA_MAX_LOADED_MODELS=1"
 Environment="OLLAMA_CONTEXT_LENGTH=1024"
-Environment="OLLAMA_KEEP_ALIVE=1m"
+Environment="OLLAMA_KEEP_ALIVE=30s"
 MemoryMax=1500M
 EOF
 echo "[5/6] Serviços"
@@ -79,9 +79,9 @@ for i in $(seq 1 30); do
  if curl -fsS http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then break; fi
  sleep 2
 done
-echo "[6/6] Modelo inicial: gemma3:270m"
-if ! ollama list | grep -q '^gemma3:270m '; then
- ollama pull gemma3:270m
+echo "[6/6] Modelo preferido: qwen3:0.6b"
+if ! ollama list | grep -q '^qwen3:0.6b '; then
+ ollama pull qwen3:0.6b
 fi
 systemctl enable --now nord-ai
 systemctl restart nord-ai
