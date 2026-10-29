@@ -150,3 +150,13 @@ Aplicar: `cd nord_ai_platform && git pull && sudo bash install.sh`, e depois `Ct
 - Nota: ao atualizar o instalador, `NORD_CONTEXT=1024` e `NORD_TOKENS_ANALYSIS=256` de perfis anteriores são migrados para os novos valores. Personalizações diferentes são mantidas.
 
 Reinstala com `git pull && sudo bash install.sh` e faz `Ctrl+F5`. Verifica o consumo de memória com `free -h` e `systemctl status ollama nord-ai`. Se ocorrer OOM, reduz `NORD_CONTEXT` para 1024 e `OLLAMA_CONTEXT_LENGTH` para 1024 no drop-in systemd.
+
+## Browser interno Chromium (headless)
+
+O Nord AI dispõe agora de um Chromium headless que só arranca quando o utilizador cola um link ou o investigador seleciona uma página. O browser renderiza HTML com JavaScript, recolhe texto visível e termina antes da geração do Qwen. Não abre janelas no painel, não guarda perfis permanentes, nem faz login nos sites. Executa como o utilizador de serviço não privilegiado `nordai`, sem `--no-sandbox`.
+
+**Limites:** uma página de cada vez, timeout de 22 segundos, texto de saída reduzido a 3600 caracteres e máximo de duas páginas por investigação. Isto não equivale a visão computacional: o Qwen 0.6B recebe texto, não pixels. Imagens, vídeo, canvas e interfaces que exigem interação não são interpretados visualmente. Alguns sites podem impedir automação, exigir login, ou renderizar mais conteúdo do que o contexto do Qwen suporta.
+
+**Atenção à VM de 2 GB:** o Chromium é pesado e pode causar OOM. Este perfil é experimental. Para estabilidade, reserva mais RAM ou migra o browser para outro servidor. O navegador recebe links externos não fiáveis e pode carregar sub-recursos de terceiros; validação de URL e sandbox não substituem firewall de saída com bloqueio de redes privadas e de metadados de cloud. Evita abrir URLs confidenciais. Em algumas versões do Ubuntu o Chromium via Snap não funciona dentro do serviço systemd; Debian com pacote Chromium nativo é a opção mais previsível.
+
+Instala/atualiza: `cd nord_ai_platform && git pull && sudo bash install.sh`. Para diagnosticar: `sudo journalctl -u nord-ai -n 100 --no-pager`.
