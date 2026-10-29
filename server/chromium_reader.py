@@ -38,7 +38,10 @@ def browser_path():
 
 def render(source, on_snapshot=None):
     url=source["url"]
-    webtools._public_https(url)
+    try:
+        webtools._public_https(url)
+    except Exception as exc:
+        raise RuntimeError("Endereço/rede bloqueados: "+str(exc)[:140]) from exc
     binary=browser_path()
     with tempfile.TemporaryDirectory(prefix="nord-chromium-") as profile:
         cmd=[
@@ -62,7 +65,7 @@ def render(source, on_snapshot=None):
             process.communicate()
             raise RuntimeError("O Chromium ultrapassou o limite de 22 segundos")
         if process.returncode:
-            raise RuntimeError("O Chromium não conseguiu renderizar a página (sandbox ou memória)")
+            raise RuntimeError("Chromium terminou com código "+str(process.returncode)+" (verificar sandbox, Snap e memória)")
         if len(out)>1_500_000:
             raise RuntimeError("Página demasiado grande para o browser interno")
     # A small read-only snapshot, captured with a separate bounded Chromium run.
@@ -90,7 +93,7 @@ def render(source, on_snapshot=None):
     parser.feed(out.decode("utf-8","replace"))
     extracted=re.sub(r"\s+"," ",unescape(" ".join(parser.parts))).strip()
     if len(extracted)<80:
-        raise RuntimeError("A página renderizada não contém texto suficiente")
+        raise RuntimeError("Página sem texto legível; pode exigir cookies, login ou outro tipo de conteúdo")
     return extracted[:3600]
 
 class GoogleResults(HTMLParser):
