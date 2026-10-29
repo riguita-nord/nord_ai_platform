@@ -90,3 +90,18 @@ O instalador copia `server/learning.py`, atualiza o frontend e reinicia o servi�
 Abre Learning Center, pesquisa **Python** na área Programação, confirma um resultado com ligação à fonte e depois faz uma pergunta sobre esse assunto no chat. Consulta os logs: `sudo journalctl -u nord-ai -n 80 --no-pager`.
 
 **Segurança da rede:** HTTP na LAN não cifra palavras-passe. Não abras portas na Internet pública; considera HTTPS ou VPN numa rede com equipamentos não confiáveis.
+
+## Nord-Qwen: modo automático e perfil de recursos
+
+O Qwen3 0.6B é o modelo preferido. O chat escolhe entre geração rápida e modo de análise por critérios leves; isto é uma heurística e não uma avaliação de inteligência. A VM atual utiliza o perfil conservador **Low Resource** (1 vCPU/2 GB). Os parâmetros do modelo não são permanentes: edita `/etc/nord-ai.env` no futuro e reinicia o serviço.
+
+```ini
+NORD_PREFERRED_MODEL=qwen3:0.6b
+NORD_CONTEXT=1024
+NORD_TOKENS_FAST=160
+NORD_TOKENS_ANALYSIS=256
+NORD_THREADS=1
+NORD_KEEP_ALIVE=30s
+```
+
+No futuro, quando migrares para uma máquina com GPU, poderás aumentar contexto/tokens e instalar outro modelo, sem mudar os pesos ou reescrever o chat. Os limites do **Ollama** são separados, no ficheiro `/etc/systemd/system/ollama.service.d/nord-limits.conf`: ajusta `MemoryMax`, `OLLAMA_CONTEXT_LENGTH`, `OLLAMA_NUM_PARALLEL` e `OLLAMA_MAX_LOADED_MODELS` conforme o hardware; depois executa `sudo systemctl daemon-reload && sudo systemctl restart ollama nord-ai`. O instalador atual é orientado para a VM de 2 GB e repõe esse perfil ao ser executado novamente.
