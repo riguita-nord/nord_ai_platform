@@ -8,7 +8,47 @@ async function openChat(id){current=id;$("#messages").replaceChildren();const j=
 function newChat(){current=null;$("#messages").replaceChildren();toggleWelcome();loadChats();$(".sidebar").classList.remove("open")}
 async function loadModels(){const j=await api("models");models=j.models;selected=models.includes(selected)?selected:(models.includes(j.preferred)?j.preferred:(models[0]||""));$("#modelSelect").replaceChildren();for(const m of models){const opt=document.createElement("option");opt.value=m;opt.textContent=m;$("#modelSelect").append(opt)}$("#modelSelect").value=selected;$("#modelCount").textContent=models.length+" instalado(s)";const box=$("#installedModels");box.replaceChildren();for(const m of models){const row=document.createElement("div");row.className="model-row";const label=document.createElement("strong");label.textContent="✳  "+m;const del=document.createElement("button");del.textContent="Remover";del.onclick=async()=>{if(!confirm("Remover "+m+"?"))return;try{await api("delete-model",{name:m});await loadModels()}catch(e){alert(e.message)}};row.append(label,del);box.append(row)}if(!models.length)box.textContent="Ainda não há modelos instalados."}
 async function watchJobs(){try{const j=await api("jobs");const jobs=Object.values(j.jobs);const latest=jobs.at(-1);if(latest){$("#jobStatus").textContent=latest.name+" — "+latest.status+(latest.percent===null||latest.percent===undefined?"":" ("+latest.percent+"%)");if(!latest.done){setTimeout(watchJobs,1300)}else{await loadModels()}}}catch(e){$("#jobStatus").textContent=e.message}}
-async function send(){if(busy)return;const prompt=$("#prompt").value.trim();if(!prompt)return;if(!selected)return alert("Instala um modelo primeiro.");busy=true;$("#send").disabled=true;$("#prompt").value="";textNode("user",prompt);const el=textNode("assistant","A pensar…");toggleWelcome();try{const res=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:selected,prompt,conversation_id:current})});if(!res.ok){const e=await res.json();throw Error(e.error||"Falha no chat")}const reader=res.body.getReader(),decoder=new TextDecoder();let buf="",full="";while(true){const {done,value}=await reader.read();if(done)break;buf+=decoder.decode(value,{stream:true});let ix;while((ix=buf.indexOf("\n"))>=0){const line=buf.slice(0,ix);buf=buf.slice(ix+1);if(!line.trim())continue;const event=JSON.parse(line);if(event.conversation_id)current=event.conversation_id;if(event.error)throw Error(event.error);if(event.text){full+=event.text;el.textContent=full;$("#chat").scrollTop=$("#chat").scrollHeight}}}if(!full)el.textContent="Sem resposta do modelo.";await loadChats()}catch(e){el.textContent="Erro: "+e.message}finally{busy=false;$("#send").disabled=false;$("#prompt").focus()}}
+async function send(){
+ if(busy)return;
+ const prompt=$("#prompt").value.trim();if(!prompt)return;
+ if(!selected)return alert("Instala um modelo primeiro.");
+ busy=true;$("#send").disabled=true;$("#prompt").value="";
+ textNode("user",prompt);const el=textNode("assistant","");
+ toggleWelcome();
+ const indicator=$("#activityStatus");
+ indicator.classList.remove("hidden");
+ indicator.textContent="◌ A preparar resposta · Sem pesquisa na Internet";
+ let full="",completed=false,sawDone=false;
+ try{
+  const res=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({model:selected,prompt,conversation_id:current})});
+  if(!res.ok){const e=await res.json();throw Error(e.error||"Falha no chat")}
+  const reader=res.body.getReader(),decoder=new TextDecoder();let buf="";
+  const handle=line=>{
+   if(!line.trim())return;
+   const event=JSON.parse(line);
+   if(event.conversation_id)current=event.conversation_id;
+   if(event.error)throw Error(event.error);
+   if(event.status)indicator.textContent="◌ "+event.status+(event.search_performed?" · Pesquisa Web":" · Sem pesquisa na Internet");
+   if(event.text){full+=event.text;el.textContent=full;$("#chat").scrollTop=$("#chat").scrollHeight}
+   if(event.done){sawDone=true;completed=!!event.complete}
+  };
+  while(true){
+   const {done,value}=await reader.read();if(done)break;
+   buf+=decoder.decode(value,{stream:true});let ix;
+   while((ix=buf.indexOf("\n"))>=0){const line=buf.slice(0,ix);buf=buf.slice(ix+1);handle(line)}
+  }
+  buf+=decoder.decode();if(buf.trim())handle(buf);
+  if(!full)el.textContent="O modelo não devolveu texto.";
+  if(!sawDone||!completed){
+   el.textContent+=(full?"\n\n":"")+"[Resposta interrompida. Podes pedir para continuar.]";
+   indicator.textContent="⚠ Resposta incompleta · Sem pesquisa na Internet";
+  }else indicator.textContent="✓ Resposta concluída · Sem pesquisa na Internet";
+  await loadChats();
+ }catch(e){
+  el.textContent=(full?full+"\n\n":"")+"Erro: "+e.message;
+  indicator.textContent="⚠ Erro na geração";
+ }finally{busy=false;$("#send").disabled=false;$("#prompt").focus()}
+}
 $("#loginForm").onsubmit=async e=>{e.preventDefault();try{await api("login",{password:$("#password").value});$("#password").value="";$("#loginError").textContent="";showApp(true);await Promise.all([loadChats(),loadModels()])}catch(e){$("#loginError").textContent=e.message}};
 $("#logout").onclick=async()=>{await api("logout",{});showApp(false)};
 $("#newChat").onclick=newChat;$("#menuBtn").onclick=()=>$(".sidebar").classList.toggle("open");
