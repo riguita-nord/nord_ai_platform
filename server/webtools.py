@@ -1,30 +1,31 @@
-"""Search adapter: model chooses queries; runtime fetches bounded search results safely."""
-import json
+"""Bounded web search. The model chooses queries and source IDs, not destinations."""
 import re
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from html import unescape
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        raise ValueError("Redirecionamentos bloqueados")
 
 def search(query):
     query=str(query).strip()[:110]
     if len(query)<3: return []
-    # Search-engine endpoint fixed; never fetch arbitrary links returned by results.
-    url="https://www.google.com/search?"+urllib.parse.urlencode({"q":query,"num":"5"})
-    req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 (compatible; NordAI/1.2)","Accept":"text/html"})
-    class NoRedirect(urllib.request.HTTPRedirectHandler):
-        def redirect_request(self,*args,**kwargs): raise ValueError("Redirect blocked")
+    url="https://www.bing.com/search?"+urllib.parse.urlencode({"q":query,"format":"rss","count":"5"})
+    req=urllib.request.Request(url,headers={"User-Agent":"NordAI/1.2 (+private research assistant)","Accept":"application/rss+xml,application/xml"})
     with urllib.request.build_opener(NoRedirect).open(req,timeout=8) as response:
-        data=response.read(120001)
-    if len(data)>120000:raise ValueError("Oversized search")
-    # Google HTML is not a stable API; explicitly fail closed when parsing fails.
-    html=data.decode("utf-8","replace")
-    rows=[]
-    for match in re.finditer(r'<a href="(https?[^"]+)"[^>]*>.*?<h3[^>]*>(.*?)</h3>',html,re.I|re.S):
-        link=unescape(match.group(1))
-        title=re.sub("<[^>]+>","",unescape(match.group(2))).strip()
-        p=urllib.parse.urlsplit(link)
-        if p.scheme!="https" or not p.hostname or p.hostname.endswith("google.com"):continue
-        if len(title)<5:continue
-        rows.append({"title":title[:140],"url":link[:450]})
-        if len(rows)>=3:break
-    return rows
+        body=response.read(100001)
+    if len(body)>100000: raise ValueError("Pesquisa demasiado grande")
+    root=ET.fromstring(body)
+    results=[]
+    for item in root.findall(".//channel/item")[:5]:
+        title=(item.findtext("title") or "").strip()[:140]
+        link=(item.findtext("link") or "").strip()
+        description=re.sub(r"<[^>]+>"," ",unescape(item.findtext("description") or ""))
+        description=re.sub(r"\s+"," ",description).strip()[:430]
+        parsed=urllib.parse.urlsplit(link)
+        if parsed.scheme!="https" or not parsed.hostname or len(title)<4: continue
+        if parsed.username or parsed.password or parsed.port not in (None,443): continue
+        results.append({"id":len(results)+1,"title":title,"url":link[:500],"snippet":description})
+    return results
