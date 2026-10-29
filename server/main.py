@@ -319,7 +319,7 @@ class Handler(BaseHTTPRequestHandler):
                 for link in direct_links:
                     try:
                         event({"status":"A renderizar página: "+link[:90],"search_performed":True})
-                        page_text=chromium_reader.render({"url":link})
+                        page_text=chromium_reader.render({"url":link},on_snapshot=lambda png: event({"browser_snapshot":png,"browser_url":link}))
                         if len(page_text.strip())<80:
                             event({"status":"Página sem texto suficiente","search_performed":True})
                             continue
@@ -399,7 +399,7 @@ class Handler(BaseHTTPRequestHandler):
                             event({"status":"A renderizar e analisar fontes","search_performed":True})
                             for source in selected_sources:
                                 try:
-                                    page=chromium_reader.render(source)
+                                    page=chromium_reader.render(source,on_snapshot=lambda png: event({"browser_snapshot":png,"browser_url":source["url"]}))
                                     # Um resumo do motor de busca não é validação de factos.
                                     if len(page.strip())<180:continue
                                     excerpt=page[:1050]
