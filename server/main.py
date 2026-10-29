@@ -304,8 +304,8 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     conversation_messages[0]["content"]+="\\nOs links fornecidos não puderam ser lidos. Explica esta limitação, sem inventar o conteúdo."
             # Explicit online research, not ordinary requests for extra detail.
-            explicit_web=bool(re.search(r"(?:pesquis\w*|investig\w*|procur\w*|consult\w*)\\s+(?:na\\s+)?(?:internet|web|online)|(?:fontes|referências)\\s+(?:online|atuais|da\\s+internet)|(?:últimas?\\s+notícias|notícias\\s+de\\s+hoje)",prompt.lower()))
-            freshness=bool(re.search(r"\\b(?:hoje|agora|atualmente|mais\\s+recentes?|últimas?\\s+notícias|preços?\\s+atuais|2026)\\b",prompt.lower()))
+            explicit_web=bool(re.search(r"(?:pesquis\w*|investig\w*|procur\w*|consult\w*)\s+(?:na\s+)?(?:internet|web|online)|(?:fontes|referências)\s+(?:online|atuais|da\s+internet)|(?:últimas?\s+notícias|notícias\s+de\s+hoje)",prompt.lower()))
+            freshness=bool(re.search(r"\b(?:hoje|agora|atualmente|mais\s+recentes?|últimas?\s+notícias|preços?\s+atuais|2026)\b",prompt.lower()))
             forced_search=explicit_web or freshness
             previous_questions=[row["content"] for row in history if row.get("role")=="user"]
             followup=bool(re.search(r"^(?:faz isso|faz|continua|sim|aprofund\w*|pesquis\w*|investig\w*|explica melhor)",prompt.lower().strip()))
