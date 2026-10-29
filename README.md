@@ -182,3 +182,9 @@ No topo do workspace, o botão **⌘ Atividade** abre um painel lateral com o re
 As investigações web gerais usam agora o **Google Search em Chromium headless**, em vez do Bing RSS: o modelo formula a consulta, Chromium renderiza a página de resultados, extrai links apresentados, o Qwen escolhe um resultado e Chromium abre-o para leitura. URLs e domínios já visitados são evitados dentro da investigação, incluindo a segunda tentativa. Algumas pesquisas no Google podem mostrar CAPTCHA, consentimento de cookies ou bloquear a automação: nesses casos o assistente deve indicar que não conseguiu consultar os resultados, nunca inventar uma fonte.
 
 Esta versão faz capturas num processo Chromium adicional, sequencial e limitado. **Numa VM de 2 GB pode ficar lenta ou falhar por memória**; utiliza o monitor apenas quando precisares de observar. O código está publicado mas carece de validação com Chromium real na VM. Atualiza com `git pull && bash -n install.sh && sudo bash install.sh`, seguido de `Ctrl+F5`.
+
+## Ubuntu 24.04 Chromium Snap — erro 46 em /run/user/UID
+
+Se o Chromium indicar `cannot create XDG_RUNTIME_DIR folder "/run/user/999/snap.chromium": permission denied`, o utilizador do serviço Nord AI não tem um diretório runtime de sessão gravável. O instalador passa a configurar `XDG_RUNTIME_DIR=/run/user/<UID de nordai>` e cria esse diretório com `0700` através de `ExecStartPre` com permissões elevadas. Não faz `chmod 777` nem desativa a sandbox do browser.
+
+Depois de `git pull && bash -n install.sh && sudo bash install.sh`, verifica com `systemctl cat nord-ai` se aparecem `XDG_RUNTIME_DIR` e `ExecStartPre`. Repete a consulta de uma página pública. **O Snap poderá ainda falhar devido a outras restrições de confinamento**, nomeadamente o HOME da conta de sistema e a configuração do serviço. Nessa situação recolhe a nova mensagem do terminal; não desativas a sandbox nem alteres globalmente permissões de `/run/user`.
