@@ -272,12 +272,12 @@ class Handler(BaseHTTPRequestHandler):
             event({"status":"A consultar memória" if refs else "A preparar resposta","search_performed":False})
             # Não existem pesquisas Web automáticas neste endpoint. Não indicar uma pesquisa fictícia.
             search_done=False
-            forced_search=bool(re.search(r"\b(pesquis|investig|procura|fontes|atualiz|mais detalh|aprofund)",prompt.lower()))
-            previous_questions=[row[1] for row in history if row[0]=="user"]
-            followup=bool(re.search(r"^(faz isso|faz|continua|sim|aprofund|pesquisa|investiga|explica melhor)",prompt.lower().strip()))
+            forced_search=bool(re.search(r"\b(?:pesquis\w*|investig\w*|procur\w*|fontes|atualiz\w*|mais detalh\w*|aprofund\w*)",prompt.lower()))
+            previous_questions=[row["content"] for row in history if row.get("role")=="user"]
+            followup=bool(re.search(r"^(?:faz isso|faz|continua|sim|aprofund\w*|pesquis\w*|investig\w*|explica melhor)",prompt.lower().strip()))
             if followup and any(re.search(r"pesquis|investig|fontes|mais detalh",q.lower()) for q in previous_questions[-2:]):
                 forced_search=True
-            meaningful=[q for q in previous_questions if not re.search(r"^(faz isso|faz|sim|pesquisa|investiga|mais detalh)",q.lower().strip())]
+            meaningful=[q for q in previous_questions if not re.search(r"^(?:faz isso|faz|sim|pesquis\w*|investig\w*|mais detalh\w*)",q.lower().strip())]
             subject=meaningful[-1] if meaningful else (previous_questions[-1] if previous_questions else prompt)
             research_context=(subject+" | Pedido atual: "+prompt) if len(prompt.split())<12 and previous_questions else prompt
             if model.startswith("qwen3:"):
