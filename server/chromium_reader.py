@@ -59,11 +59,11 @@ def render(source, on_snapshot=None):
                                  stderr=subprocess.PIPE,start_new_session=True)
         try:
             # Do not retain a complete arbitrarily large rendered page.
-            out,err=process.communicate(timeout=22)
+            out,err=process.communicate(timeout=75)
         except subprocess.TimeoutExpired:
             os.killpg(process.pid,signal.SIGKILL)
             process.communicate()
-            raise RuntimeError("O Chromium ultrapassou o limite de 22 segundos")
+            raise RuntimeError("O Chromium ultrapassou o limite de 75 segundos")
         if process.returncode:
             detail=(err or b"").decode("utf-8","replace").strip()
             detail=" | ".join(detail.splitlines()[-3:])[-380:]
@@ -83,7 +83,7 @@ def render(source, on_snapshot=None):
                      "--screenshot="+str(screenshot),url]
                 proc=subprocess.Popen(cmd,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,
                                       stderr=subprocess.DEVNULL,start_new_session=True)
-                try:proc.wait(timeout=14)
+                try:proc.wait(timeout=35)
                 except subprocess.TimeoutExpired:
                     os.killpg(proc.pid,signal.SIGKILL)
                     proc.wait()
@@ -140,11 +140,11 @@ def google_search(query,on_snapshot=None):
         proc=subprocess.Popen(command,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,
                               stderr=subprocess.DEVNULL,start_new_session=True)
         try:
-            data,_=proc.communicate(timeout=22)
+            data,_=proc.communicate(timeout=75)
         except subprocess.TimeoutExpired:
             os.killpg(proc.pid,signal.SIGKILL)
             proc.communicate()
-            raise RuntimeError("Pesquisa Google excedeu 22 segundos")
+            raise RuntimeError("Pesquisa Google excedeu 75 segundos")
         if proc.returncode or len(data)>1_500_000:
             raise RuntimeError("Chromium não conseguiu obter resultados Google")
     parsed=GoogleResults()
