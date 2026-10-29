@@ -130,3 +130,11 @@ A sequência de pesquisa agora é: Qwen escolhe **responder ou pesquisar**, form
 O adaptador inicial usa **Bing RSS** para pesquisa geral, sem chave de API. Esta fonte pode mudar, bloquear pedidos ou devolver resultados incompletos. Nesta versão os resultados são **títulos e resumos**, não leitura integral das páginas. O Qwen pode escolher mal as fontes, especialmente com apenas 0.6B parâmetros. Não é correto afirmar que investigou o conteúdo integral ou que confirmou factos apenas pelos resumos. A pesquisa não altera os pesos do modelo.
 
 Acessos continuam autenticados no painel. Para instalar o módulo `server/webtools.py`, atualiza com `git pull && sudo bash install.sh`. A VM continua com os limites anteriores.
+
+## Investigação contextual e leitura de fontes (29/10/2026)
+
+O Qwen é instruído a escolher consulta e fontes; pedidos explícitos de pesquisa forçam a pesquisa mesmo que a classificação do modelo falhe. Pedidos curtos de seguimento, como `faz isso`, herdam o tema recente. A pesquisa usa resultados do Bing RSS e tenta abrir até duas páginas HTTPS públicas selecionadas para retirar texto, sem executar JavaScript. São aplicados limites de tempo e tamanho, sem seguir redirecionamentos, com bloqueio de destinos privados/reservados. Para segurança reforçada contra DNS rebinding, aplica também restrições de egress ao nível da rede.
+
+O indicador mostra `A pesquisar`, `A ler as páginas escolhidas` e `A analisar fontes` só quando essas ações acontecem. Se o motor de busca estiver indisponível, o chat indica a falha e o modelo deve admitir que não conseguiu verificar. Os motores de busca podem bloquear o endpoint RSS ou devolver cobertura incompleta; isto não é garantia de acesso a todos os sites nem de respostas sempre detalhadas. A VM de 2 GB continua limitada no tamanho do contexto e na velocidade.
+
+Aplicar: `cd nord_ai_platform && git pull && sudo bash install.sh`, e depois `Ctrl+F5` no browser.
