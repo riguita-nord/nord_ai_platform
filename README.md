@@ -138,3 +138,15 @@ O Qwen é instruído a escolher consulta e fontes; pedidos explícitos de pesqui
 O indicador mostra `A pesquisar`, `A ler as páginas escolhidas` e `A analisar fontes` só quando essas ações acontecem. Se o motor de busca estiver indisponível, o chat indica a falha e o modelo deve admitir que não conseguiu verificar. Os motores de busca podem bloquear o endpoint RSS ou devolver cobertura incompleta; isto não é garantia de acesso a todos os sites nem de respostas sempre detalhadas. A VM de 2 GB continua limitada no tamanho do contexto e na velocidade.
 
 Aplicar: `cd nord_ai_platform && git pull && sudo bash install.sh`, e depois `Ctrl+F5` no browser.
+
+## Qwen3 0.6B — perfil de investigação (29/10/2026)
+
+- Temperatura de geração quando pesquisa: **1.0** (escolha explícita do administrador; temperaturas elevadas podem produzir mais variação factual).
+- Contexto por pedido: **2048 tokens**, geração até **512 tokens por etapa** de investigação.
+- O Qwen escolhe a consulta e escolhe até duas fontes para ler. Se não houver páginas legíveis, tenta **uma segunda pesquisa** e apresenta estado específico.
+- Um resumo do motor de busca não basta para marcar conteúdo como evidência; só páginas efetivamente lidas entram no contexto de investigação.
+- Fontes externas são tratadas como dados não fiáveis, sem execução de scripts ou instruções das páginas. O processo não comprova automaticamente a veracidade das fontes; o modelo deve citar URLs e admitir incertezas.
+- Os limites da VM permanecem: **1 vCPU**, **uma geração em simultâneo**, até **1500 MB** no serviço Ollama, respostas com tamanho limitado, sessões de modelo com keep-alive curto. Os valores podem ser reduzidos em `/etc/nord-ai.env` se houver pressão de memória.
+- Nota: ao atualizar o instalador, `NORD_CONTEXT=1024` e `NORD_TOKENS_ANALYSIS=256` de perfis anteriores são migrados para os novos valores. Personalizações diferentes são mantidas.
+
+Reinstala com `git pull && sudo bash install.sh` e faz `Ctrl+F5`. Verifica o consumo de memória com `free -h` e `systemctl status ollama nord-ai`. Se ocorrer OOM, reduz `NORD_CONTEXT` para 1024 e `OLLAMA_CONTEXT_LENGTH` para 1024 no drop-in systemd.
