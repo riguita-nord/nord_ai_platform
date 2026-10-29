@@ -56,16 +56,18 @@ def render(source, on_snapshot=None):
         # Chromium runs as the unprivileged nordai service user, with its sandbox
         # enabled. Never add --no-sandbox to make it launch.
         process=subprocess.Popen(cmd,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,
-                                 stderr=subprocess.DEVNULL,start_new_session=True)
+                                 stderr=subprocess.PIPE,start_new_session=True)
         try:
             # Do not retain a complete arbitrarily large rendered page.
-            out,_=process.communicate(timeout=22)
+            out,err=process.communicate(timeout=22)
         except subprocess.TimeoutExpired:
             os.killpg(process.pid,signal.SIGKILL)
             process.communicate()
             raise RuntimeError("O Chromium ultrapassou o limite de 22 segundos")
         if process.returncode:
-            raise RuntimeError("Chromium terminou com código "+str(process.returncode)+" (verificar sandbox, Snap e memória)")
+            detail=(err or b"").decode("utf-8","replace").strip()
+            detail=" | ".join(detail.splitlines()[-3:])[-380:]
+            raise RuntimeError("Chromium terminou com código "+str(process.returncode)+((": "+detail) if detail else " (sem diagnóstico em stderr)"))
         if len(out)>1_500_000:
             raise RuntimeError("Página demasiado grande para o browser interno")
     # A small read-only snapshot, captured with a separate bounded Chromium run.
