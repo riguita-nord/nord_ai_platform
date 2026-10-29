@@ -12,6 +12,7 @@ from html import unescape
 from html.parser import HTMLParser
 import webtools
 import urllib.parse
+import time
 
 class VisibleText(HTMLParser):
     def __init__(self):
@@ -36,7 +37,20 @@ def browser_path():
         if cmd and os.path.realpath(cmd)!="/usr/bin/snap":return cmd
     raise RuntimeError("Browser nativo não instalado; Chromium Snap não é compatível com o confinamento atual. Executa sudo bash install.sh.")
 
-def render(source, on_snapshot=None):
+def _process_health(pid):
+    try:
+        status=Path("/proc")/str(pid)/"status"
+        lines=status.read_text().splitlines()
+        values={}
+        for line in lines:
+            if line.startswith(("State:","VmRSS:","Threads:")):
+                key,value=line.split(":",1)
+                values[key]=value.strip()
+        return " | ".join(key+" "+value for key,value in values.items()) or "sem métricas"
+    except Exception:
+        return "processo indisponível"
+
+def render(source, on_snapshot=None, on_progress=None):
     url=source["url"]
     try:
         webtools._public_https(url)
@@ -60,13 +74,23 @@ def render(source, on_snapshot=None):
         # enabled. Never add --no-sandbox to make it launch.
         process=subprocess.Popen(cmd,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE,start_new_session=True)
+        started=time.monotonic()
         try:
-            # Do not retain a complete arbitrarily large rendered page.
-            out,err=process.communicate(timeout=75)
+            while process.poll() is None:
+                elapsed=time.monotonic()-started
+                if elapsed>75:
+                    os.killpg(process.pid,signal.SIGKILL)
+                    process.communicate()
+                    raise RuntimeError("Chrome bloqueado após 75s; último diagnóstico: "+_process_health(process.pid))
+                if on_progress and int(elapsed)%5==0 and int(elapsed)!=last_report:
+                    last_report=int(elapsed)
+                    on_progress("Chrome em execução há "+str(last_report)+"s · "+_process_health(process.pid))
+                time.sleep(0.5)
+            out,err=process.communicate(timeout=3)
         except subprocess.TimeoutExpired:
             os.killpg(process.pid,signal.SIGKILL)
             process.communicate()
-            raise RuntimeError("O Chromium ultrapassou o limite de 75 segundos")
+            raise RuntimeError("Chrome não terminou de libertar os canais")
         if process.returncode:
             detail=(err or b"").decode("utf-8","replace").strip()
             detail=" | ".join(detail.splitlines()[-3:])[-380:]
