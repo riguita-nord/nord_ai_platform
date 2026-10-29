@@ -6,6 +6,8 @@ import signal
 import subprocess
 import tempfile
 import resource
+import base64
+from pathlib import Path
 from html import unescape
 from html.parser import HTMLParser
 import webtools
@@ -33,7 +35,7 @@ def browser_path():
         if cmd:return cmd
     raise RuntimeError("Chromium não está instalado. Executa sudo bash install.sh.")
 
-def render(source):
+def render(source, on_snapshot=None):
     url=source["url"]
     webtools._public_https(url)
     binary=browser_path()
@@ -62,6 +64,27 @@ def render(source):
             raise RuntimeError("O Chromium não conseguiu renderizar a página (sandbox ou memória)")
         if len(out)>1_500_000:
             raise RuntimeError("Página demasiado grande para o browser interno")
+    # A small read-only snapshot, captured with a separate bounded Chromium run.
+    # No browser control surface, cookies, persistent profile or debug port is exposed.
+    if on_snapshot is not None:
+        try:
+            with tempfile.TemporaryDirectory(prefix="nord-preview-") as preview_dir:
+                screenshot=Path(preview_dir)/"page.png"
+                cmd=[binary,"--headless=new","--disable-gpu","--disable-dev-shm-usage",
+                     "--disable-extensions","--disable-background-networking","--no-first-run",
+                     "--no-default-browser-check","--hide-scrollbars","--window-size=960,650",
+                     "--virtual-time-budget=1600","--user-data-dir="+str(Path(preview_dir)/"profile"),
+                     "--screenshot="+str(screenshot),url]
+                proc=subprocess.Popen(cmd,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,
+                                      stderr=subprocess.DEVNULL,start_new_session=True)
+                try:proc.wait(timeout=14)
+                except subprocess.TimeoutExpired:
+                    os.killpg(proc.pid,signal.SIGKILL)
+                    proc.wait()
+                if proc.returncode==0 and screenshot.exists() and screenshot.stat().st_size<=350000:
+                    on_snapshot(base64.b64encode(screenshot.read_bytes()).decode("ascii"))
+        except Exception:
+            pass
     parser=VisibleText()
     parser.feed(out.decode("utf-8","replace"))
     extracted=re.sub(r"\s+"," ",unescape(" ".join(parser.parts))).strip()
