@@ -44,14 +44,16 @@ def render(source, on_snapshot=None):
         raise RuntimeError("Endereço/rede bloqueados: "+str(exc)[:140]) from exc
     binary=browser_path()
     with tempfile.TemporaryDirectory(prefix="nord-chromium-") as profile:
+        screenshot=Path(profile)/"capture.png"
         cmd=[
             binary,"--headless=new","--disable-gpu","--disable-dev-shm-usage",
             "--disable-extensions","--disable-background-networking","--disable-sync",
+            "--disable-features=MediaRouter,OptimizationHints,Translate",
             "--no-first-run","--no-default-browser-check",
             "--no-crash-upload","--disable-component-update",
             "--hide-scrollbars","--window-size=1280,900",
             "--virtual-time-budget=3500","--dump-dom",
-            "--user-data-dir="+profile,url
+            "--user-data-dir="+profile,"--screenshot="+str(screenshot),url
         ]
         # Chromium runs as the unprivileged nordai service user, with its sandbox
         # enabled. Never add --no-sandbox to make it launch.
@@ -70,25 +72,11 @@ def render(source, on_snapshot=None):
             raise RuntimeError("Chromium terminou com código "+str(process.returncode)+((": "+detail) if detail else " (sem diagnóstico em stderr)"))
         if len(out)>1_500_000:
             raise RuntimeError("Página demasiado grande para o browser interno")
-    # A small read-only snapshot, captured with a separate bounded Chromium run.
-    # No browser control surface, cookies, persistent profile or debug port is exposed.
-    if on_snapshot is not None:
+    # The screenshot comes from the same Chrome process as the DOM.
+    if on_snapshot is not None and screenshot.exists():
         try:
-            with tempfile.TemporaryDirectory(prefix="nord-preview-") as preview_dir:
-                screenshot=Path(preview_dir)/"page.png"
-                cmd=[binary,"--headless=new","--disable-gpu","--disable-dev-shm-usage",
-                     "--disable-extensions","--disable-background-networking","--no-first-run",
-                     "--no-default-browser-check","--hide-scrollbars","--window-size=960,650",
-                     "--virtual-time-budget=1600","--user-data-dir="+str(Path(preview_dir)/"profile"),
-                     "--screenshot="+str(screenshot),url]
-                proc=subprocess.Popen(cmd,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,
-                                      stderr=subprocess.DEVNULL,start_new_session=True)
-                try:proc.wait(timeout=35)
-                except subprocess.TimeoutExpired:
-                    os.killpg(proc.pid,signal.SIGKILL)
-                    proc.wait()
-                if proc.returncode==0 and screenshot.exists() and screenshot.stat().st_size<=350000:
-                    on_snapshot(base64.b64encode(screenshot.read_bytes()).decode("ascii"))
+            if screenshot.stat().st_size<=700000:
+                on_snapshot(base64.b64encode(screenshot.read_bytes()).decode("ascii"))
         except Exception:
             pass
     parser=VisibleText()
@@ -132,11 +120,12 @@ def google_search(query,on_snapshot=None):
     webtools._public_https(url)
     binary=browser_path()
     with tempfile.TemporaryDirectory(prefix="nord-google-") as profile:
+        screenshot=Path(profile)/"capture.png"
         command=[binary,"--headless=new","--disable-gpu","--disable-dev-shm-usage",
                  "--disable-extensions","--disable-background-networking","--no-first-run",
                  "--no-default-browser-check","--window-size=1280,900",
                  "--virtual-time-budget=3000","--dump-dom",
-                 "--user-data-dir="+profile,url]
+                 "--user-data-dir="+profile,"--screenshot="+str(screenshot),url]
         proc=subprocess.Popen(command,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,
                               stderr=subprocess.DEVNULL,start_new_session=True)
         try:
@@ -167,8 +156,9 @@ def google_search(query,on_snapshot=None):
         results.append({"id":len(results)+1,"title":title[:160],"url":target[:650],
                         "snippet":"Resultado apresentado pelo Google"})
         if len(results)==6:break
-    if on_snapshot:
-        # Screenshot is observational only; it does not grant interactive control.
-        try:render({"url":url},on_snapshot=on_snapshot)
+    if on_snapshot and screenshot.exists():
+        try:
+            if screenshot.stat().st_size<=700000:
+                on_snapshot(base64.b64encode(screenshot.read_bytes()).decode("ascii"))
         except Exception:pass
     return results
