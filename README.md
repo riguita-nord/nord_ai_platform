@@ -122,3 +122,11 @@ Para aplicar: `git pull && sudo bash install.sh`; atualiza a página com Ctrl+F5
 - O estado exibido no chat distingue preparação, decisão de pesquisa, pesquisa real, análise das fontes, resposta e continuação. Não apresenta pesquisa quando nenhuma aconteceu.
 - Se a fonte falhar, o modelo continua a responder com as limitações indicadas. A decisão automática de pesquisar e a qualidade das fontes não são garantidas num modelo de 0.6B.
 - Para atualizar: `cd nord_ai_platform && git pull && sudo bash install.sh`. Recarrega a página com Ctrl+F5.
+
+## Pesquisa decidida pelo Qwen (modelo como investigador)
+
+A sequência de pesquisa agora é: Qwen escolhe **responder ou pesquisar**, formula a sua própria consulta, recebe até cinco resultados de pesquisa e escolhe até três referências para orientar a resposta. Os indicadores mostram a consulta real e os títulos selecionados. A ferramenta externa limita downloads e tempo, e não visita nem executa URLs dos resultados.
+
+O adaptador inicial usa **Bing RSS** para pesquisa geral, sem chave de API. Esta fonte pode mudar, bloquear pedidos ou devolver resultados incompletos. Nesta versão os resultados são **títulos e resumos**, não leitura integral das páginas. O Qwen pode escolher mal as fontes, especialmente com apenas 0.6B parâmetros. Não é correto afirmar que investigou o conteúdo integral ou que confirmou factos apenas pelos resumos. A pesquisa não altera os pesos do modelo.
+
+Acessos continuam autenticados no painel. Para instalar o módulo `server/webtools.py`, atualiza com `git pull && sudo bash install.sh`. A VM continua com os limites anteriores.
