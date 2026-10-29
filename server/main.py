@@ -303,10 +303,14 @@ class Handler(BaseHTTPRequestHandler):
                     event({"status":"A analisar a página","search_performed":True,"sources":page_sources})
                 else:
                     conversation_messages[0]["content"]+="\\nOs links fornecidos não puderam ser lidos. Explica esta limitação, sem inventar o conteúdo."
-            forced_search=bool(re.search(r"\b(?:pesquis\w*|investig\w*|procur\w*|fontes|atualiz\w*|mais detalh\w*|aprofund\w*)",prompt.lower()))
+            # Explicit online research, not ordinary requests for extra detail.
+            explicit_web=bool(re.search(r"(?:pesquis\w*|investig\w*|procur\w*|consult\w*)\\s+(?:na\\s+)?(?:internet|web|online)|(?:fontes|referências)\\s+(?:online|atuais|da\\s+internet)|(?:últimas?\\s+notícias|notícias\\s+de\\s+hoje)",prompt.lower()))
+            freshness=bool(re.search(r"\\b(?:hoje|agora|atualmente|mais\\s+recentes?|últimas?\\s+notícias|preços?\\s+atuais|2026)\\b",prompt.lower()))
+            forced_search=explicit_web or freshness
             previous_questions=[row["content"] for row in history if row.get("role")=="user"]
             followup=bool(re.search(r"^(?:faz isso|faz|continua|sim|aprofund\w*|pesquis\w*|investig\w*|explica melhor)",prompt.lower().strip()))
-            if followup and any(re.search(r"pesquis|investig|fontes|mais detalh",q.lower()) for q in previous_questions[-2:]):
+            # Only explicit research follows through; "explica melhor" is not a web command.
+            if followup and re.search(r"^(?:pesquis|investig)",prompt.lower().strip()):
                 forced_search=True
             meaningful=[q for q in previous_questions if not re.search(r"^(?:faz isso|faz|sim|pesquis\w*|investig\w*|mais detalh\w*)",q.lower().strip())]
             subject=meaningful[-1] if meaningful else (previous_questions[-1] if previous_questions else prompt)
@@ -315,9 +319,9 @@ class Handler(BaseHTTPRequestHandler):
                 event({"status":"A decidir se preciso de pesquisar","search_performed":False})
                 try:
                     decision={"model":model,"stream":False,"think":False,"keep_alive":KEEP_ALIVE,
-                        "messages":[{"role":"system","content":"És um assistente com uma ferramenta WEB_SEARCH. Responde exatamente em JSON: {\"action\":\"search\" ou \"answer\",\"query\":\"consulta curta e específica\"}. Escolhe search quando desconheces factos, o utilizador pede fontes, ou a informação pode ter mudado. Tu escolhes a pesquisa; nunca inventes fontes."},
+                        "messages":[{"role":"system","content":"És um assistente com uma ferramenta WEB_SEARCH. Responde exatamente em JSON: {\"action\":\"search\" ou \"answer\",\"query\":\"consulta curta e específica\"}. Escolhe answer para explicações gerais, programação, brainstorming, escrita, lógica e quando podes responder sem dados externos. Escolhe search apenas se a pergunta exigir factos recentes, verificação externa ou informação específica que não está disponível no contexto. Não pesquisas apenas por o utilizador pedir mais detalhe. Nunca inventes fontes."},
                         {"role":"user","content":research_context[:450]}],
-                        "format":"json","options":{"num_ctx":min(CTX,1024),"num_predict":90,"num_thread":THREADS,"temperature":RESEARCH_TEMPERATURE}}
+                        "format":"json","options":{"num_ctx":min(CTX,1024),"num_predict":90,"num_thread":THREADS,"temperature":0.0}}
                     with ollama("/api/chat",decision,timeout=90) as choice:
                         raw=json.load(choice).get("message",{}).get("content","{}")
                     plan=json.loads(raw)
@@ -326,6 +330,8 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     need_web=forced_search
                     query=""
+                if not need_web:
+                    event({"status":"Conhecimento local suficiente · sem pesquisa","search_performed":False})
                 if need_web and len(query)<3:
                     query=research_context[:110]
                 if need_web:
