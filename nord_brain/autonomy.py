@@ -118,6 +118,17 @@ class Autonomy:
                 if not brain.memory.is_holdout(question):
                     brain._learn(question,answer,epochs=1,origin='verified_experiment')
                 brain.memory.set_meta('curriculum_cursor',str(cursor+1))
+                # Practice compositional consequences of teacher-provided facts.
+                # Every label is derived by a bounded proof, not invented by the model.
+                if self._ticks%2==0:
+                    example=brain.reasoner.derived_example(self._ticks//2)
+                    if example and not brain.memory.is_holdout(example[0]):
+                        try:
+                            brain._learn(*example,epochs=1,origin='reasoning_proof')
+                            brain.memory.event('reasoning_practice','teacher-grounded deduction')
+                        except ValueError as e:
+                            # A derived sentence can exceed tiny context/training limits.
+                            brain.memory.event('reasoning_skipped',str(e)[:140])
             # Replay is also learning: old examples are reintroduced without an
             # extra teacher command. Keep CPU use small on 1-vCPU machines.
             recent=brain.memory.lessons(8)

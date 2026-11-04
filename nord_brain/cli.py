@@ -49,7 +49,7 @@ def main(argv=None):
     parser.add_argument('--data',type=Path,default=Path(os.environ.get('NORD_DATA',str(Path.home()/'.nord-brain'))))
     args=parser.parse_args(argv)
     brain=Brain(args.data)
-    print('Nord Brain v0.3 | Transformer próprio | aprendizagem autónoma experimental')
+    print('Nord Brain v0.4 | Transformer próprio | aprendizagem autónoma experimental')
     print('Fala normalmente. Escreve /ajuda para exemplos ou /sair para terminar.')
     try:
         while True:

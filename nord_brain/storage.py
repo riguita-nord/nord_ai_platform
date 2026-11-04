@@ -37,7 +37,32 @@ class Memory:
             id INTEGER PRIMARY KEY, kind TEXT NOT NULL, detail TEXT NOT NULL,
             value REAL, created INTEGER NOT NULL);
         ''')
+        self.db.executescript('''
+        CREATE TABLE IF NOT EXISTS reasoning_facts (
+            subject TEXT NOT NULL, predicate TEXT NOT NULL, object TEXT NOT NULL,
+            statement TEXT NOT NULL, origin TEXT NOT NULL, created INTEGER NOT NULL,
+            PRIMARY KEY (subject, predicate, object)
+        );
+        ''')
         self.db.commit()
+
+    def add_reasoning_fact(self, subject, predicate, obj, statement, origin='teacher'):
+        if predicate not in ('is_a','has') or origin!='teacher':
+            raise ValueError('Apenas premissas confirmadas pelo professor')
+        with self.db:
+            self.db.execute('''INSERT INTO reasoning_facts
+                (subject,predicate,object,statement,origin,created) VALUES (?,?,?,?,?,?)
+                ON CONFLICT(subject,predicate,object) DO UPDATE SET
+                statement=excluded.statement,created=excluded.created''',
+                (subject,predicate,obj,statement,origin,int(time.time())))
+
+    def reasoning_facts(self, limit=300):
+        return self.db.execute('''SELECT subject,predicate,object,statement
+            FROM reasoning_facts ORDER BY created,subject,predicate,object LIMIT ?''',
+            (limit,)).fetchall()
+
+    def reasoning_fact_count(self):
+        return self.db.execute('SELECT COUNT(*) FROM reasoning_facts').fetchone()[0]
 
     def teach(self, question: str, answer: str, origin: str = 'teacher') -> int:
         question,answer=question.strip(),answer.strip()

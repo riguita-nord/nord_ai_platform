@@ -1,6 +1,47 @@
-# Nord Brain V0.3 — aprendizagem autónoma e conversa pelo terminal
+# Nord Brain V0.4 — raciocínio verificável, aprendizagem autónoma e conversa pelo terminal
 
 **Projeto experimental, sem pesos pré-treinados.** O cérebro é um Transformer próprio em PyTorch (atenção causal/GQA, RoPE, RMSNorm e SwiGLU) e **não usa o Qwen nem Ollama**. A arquitetura está preparada para aprender pesos, guardar experiências e experimentar expansão neuronal. **Não é equivalente a um LLM treinado; não compreende português fluentemente e não existe garantia de inteligência geral.**
+
+
+## Novo na V0.4 — Raciocínio com provas e treino derivado
+
+**O objetivo desta versão é melhorar o raciocínio de forma verificável, sem fingir que o pequeno Transformer já sabe raciocinar como uma pessoa.** O novo `reasoning.py` combina duas vias: um motor simbólico limitado que consegue demonstrar algumas conclusões, e a aprendizagem neuronal existente que recebe também exemplos derivados de premissas ensinadas por ti. O resultado de uma dedução simbólica **não conta como prova de raciocínio da rede neuronal**.
+
+### Ensinar relações e perguntar naturalmente
+
+```text
+tu> Luna é um gato.
+nord> Aprendi ...
+tu> Todo gato é um mamífero.
+nord> Aprendi ...
+tu> Todos os mamíferos são animais.
+nord> Aprendi ...
+tu> Luna é um animal?
+nord> Sim. Dedução: Luna é um gato → Todo gato é um mamífero → Todos os mamíferos são animais.
+
+tu> Se Rui é um atleta e todo atleta é uma pessoa, Rui é uma pessoa?
+nord> Assumindo as duas hipóteses: Sim. ...
+
+tu> Quanto é 2 + 3 × 4?
+nord> O resultado é 14. Passos: 3 × 4 = 12; 2 + 12 = 14
+```
+
+Também aceita relações de atributos, como `Todos os gatos têm pelo.` e a pergunta `Luna tem pelo?`, além de um modelo muito restrito de problemas de quantidades. Só deduz a partir de **relações afirmativas ensinadas pelo professor**; uma resposta inconclusiva significa falta de premissas, não uma negação. Hipóteses de uma pergunta iniciada por `Se ...` são temporárias e **não alteram a memória persistente**.
+
+### Aprendizagem neuronal associada
+
+- As novas afirmações ensinadas continuam a passar pelo treino real dos pesos do Transformer (AdamW), como na V0.3. As relações também ficam guardadas em SQLite para dedução verificável.
+- O ciclo autónomo alterna exercícios verificáveis de soma e de **composição aritmética**; mantém exemplos de treino separados de exemplos reservados à avaliação.
+- Quando existem relações suficientes do professor, o agente cria alguns exemplos de conclusões com prova e utiliza-os para treinar os pesos, com limites de contexto, tempo e recursos. **Estes dados são consequências lógicas das afirmações do utilizador, não factos científicos confirmados.**
+- A aprendizagem neuronal pode continuar a falhar em perguntas novas. Para responder com confiança a questões cobertas pelas regras, a interface utiliza o motor verificável e identifica a origem através de `NORD_SHOW_ORIGIN=on`.
+
+**Limites:** a linguagem compreendida pelo verificador é restrita (`é`, `tem`, `todos os ... são/têm`, expressões aritméticas e alguns problemas simples). Não existe compreensão geral, raciocínio humano nem verificação automática da verdade das afirmações do professor. A expansão de neurónios da V0.3 continua a ser experimental e não depende de deduções sem testes independentes. A Internet permanece separada dos dados de treino.
+
+### Testar só o raciocínio
+
+```bash
+.venv/bin/python -m unittest tests.test_reasoning -v
+```
 
 ## Como iniciar
 
@@ -97,6 +138,7 @@ nord_brain/
   conversation.py  # Reconhecimento transparente de padrões em português
   autonomy.py      # Ciclo autónomo, experiências e ensaios de crescimento
   experiments.py   # Exercícios verificáveis com conjuntos de teste distintos
+  reasoning.py     # Provas por relações ensinadas, hipóteses e aritmética
   storage.py       # Memória, lições, testes, eventos, estados da autonomia
   vocabulary.py    # Sementes lexicais iniciais (não pré-treinam)
   internet.py      # Pesquisa opcional com fonte
@@ -111,7 +153,7 @@ A memória anterior e o checkpoint V0.2 continuam compatíveis. A principal inte
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Os testes cobrem causalidade, pesos alterados e persistidos, frases naturais de ensino e correção, janela de treino longa, treino autónomo em thread, separação de treino/teste e decisão reversível de crescimento. **Estes são testes de implementação, não provas de inteligência**.
+Os testes cobrem também inferência em várias etapas, hipóteses temporárias, aritmética segura, ensino conversacional e treino derivado. Os restantes testes cobrem causalidade, pesos alterados e persistidos, frases naturais de ensino e correção, janela de treino longa, treino autónomo em thread, separação de treino/teste e decisão reversível de crescimento. **Estes são testes de implementação, não provas de inteligência**.
 
 ### Limites reais
 

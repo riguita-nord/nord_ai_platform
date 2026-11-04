@@ -15,6 +15,7 @@ from .vocabulary import initialize
 from .conversation import interpret
 from .autonomy import Autonomy
 from .internet import search
+from .reasoning import ReasoningEngine, parse_fact
 
 
 class Brain:
@@ -33,6 +34,7 @@ class Brain:
         if profile not in profiles:
             raise ValueError('NORD_BRAIN_PRESET deve ser tiny, small ou medium')
         self.core=NeuralCore(self.data_dir/'brain-v2.pt',config=profiles[profile])
+        self.reasoner=ReasoningEngine(self.memory)
         self.last_question=None
         self.awaiting_explanation=False
         self.autonomy=Autonomy(self)
@@ -93,6 +95,8 @@ class Brain:
                 if intent.kind=='fact':
                     self.memory.concept(intent.topic,intent.answer,origin='teacher')
                 self._learn(intent.question,intent.answer,epochs=1,origin='teacher')
+                if intent.kind=='fact':
+                    self.reasoner.learn(message)
                 if intent.kind=='correction':
                     return 'Obrigado pela correção. Atualizei os pesos e vou rever este exemplo.','aprendizagem neuronal + memória'
                 if intent.kind=='identity':
@@ -100,6 +104,33 @@ class Brain:
                 if intent.kind=='fact':
                     return f'Entendido. Aprendi a descrição de {intent.topic}.','aprendizagem neuronal + memória'
                 return 'Entendido. Guardei o exemplo e atualizei os pesos neuronais.','aprendizagem neuronal + memória'
+            # Unambiguous declarative teacher facts can teach relations as well.
+            # The symbolic graph is distinct from the Transformer weights.
+            if intent.kind=='question' and not message.strip().endswith('?'):
+                fact=parse_fact(message)
+                if fact:
+                    self._learn(f'O que sabes sobre {fact.subject}?',fact.statement,epochs=1,origin='teacher')
+                    self.reasoner.learn(message)
+                    self.awaiting_explanation=False
+                    return 'Aprendi essa relação. Vou tentar aplicá-la a outras perguntas.', 'premissa ensinada + treino neuronal'
+            # Verified composition before a neural guess: no pretending that
+            # deterministic math or graph traversal is neural generalisation.
+            if intent.kind in ('question','definition_question'):
+                # Existing explicitly taught answers retain priority over inference.
+                direct=self.memory.exact(intent.question or message) if intent.kind=='question' else None
+                if direct is not None:
+                    self.last_question=message.strip()
+                    self.awaiting_explanation=False
+                    return direct,'memória ensinada (não é generalização neuronal)'
+                # Keep the teacher's direct definition preferred over a graph listing.
+                proof=(None if intent.kind=='definition_question' and self.memory.lookup_concept(intent.topic)
+                       else self.reasoner.solve(message))
+                if proof:
+                    self.last_question=message.strip()
+                    self.awaiting_explanation=proof.method=='incomplete'
+                    if proof.method=='incomplete':self.memory.unknown(message[:90])
+                    else:self.memory.event('reasoning',proof.method,float(len(proof.steps)))
+                    return proof.answer, 'raciocínio verificável (simbólico, não neuronal)' if proof.method!='incomplete' else 'informação insuficiente'
             if intent.kind=='search':
                 if os.getenv('NORD_INTERNET','off').lower() not in ('on','1','true'):
                     return 'Ainda não tenho acesso à Internet. Preciso que seja ativada na configuração.','ferramenta indisponível'
@@ -170,6 +201,7 @@ class Brain:
                     'parametros':self.core.parameter_count,
                     'passos_de_treino':self.core.steps,
                     'exemplos_ensinados':self.memory.lesson_count(),
+                    'premissas_de_raciocinio':self.memory.reasoning_fact_count(),
                     'palavras_iniciais':len(self.vocabulary),
                     'testes_independentes':len(self.memory.tests(10000)),
                     'autonomia':asdict(self.autonomy.settings),
