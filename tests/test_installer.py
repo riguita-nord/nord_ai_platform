@@ -124,9 +124,7 @@ exec "$@"
         self.assertEqual(r.returncode,0,r.stderr)
         self.assertEqual(data.read_text(),'KEEP')
 
-
     def test_existing_torch_but_missing_numpy_is_repaired(self):
-        # Simulate the user's VM: torch imports correctly, NumPy is absent.
         flag=self.root/'numpy-installed'
         self.env['MOCK_NUMPY_FLAG']=str(flag)
         self.fake_venv.write_text('''#!/usr/bin/env bash
@@ -149,13 +147,12 @@ exit 55
 ''')
         self.fake_venv.chmod(0o755)
         result=self.call('install.sh')
-        self.assertEqual(result.returncode,0,result.stdout+'\\n'+result.stderr)
+        self.assertEqual(result.returncode,0,result.stdout+'\n'+result.stderr)
         self.assertTrue(flag.exists())
         self.assertIn('NumPy',result.stdout)
         self.assertIn('RUNNING',result.stdout)
-        # A second launch should reuse the installed NumPy.
         result=self.call('install.sh')
-        self.assertEqual(result.returncode,0,result.stdout+'\\n'+result.stderr)
+        self.assertEqual(result.returncode,0,result.stdout+'\n'+result.stderr)
         self.assertNotIn('A instalar NumPy',result.stdout)
 
 if __name__=='__main__':unittest.main()

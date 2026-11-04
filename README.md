@@ -1,3 +1,40 @@
+# Nord Brain V1.1 — teorias de causa e efeito e controlo do professor
+
+Agora, depois de uma demonstração verificada como `2+2 é 4`, a Nord Brain gera **hipóteses contrafactuais**: mudar o primeiro ou segundo valor em +1/-1, transferir 1 entre eles, trocar a operação, duplicar ambos e experimentar novos valores. Por exemplo, `3+2=5`, `1+2=3`, `3+1=4`, `3+3=6` e `4+4=8`. Cada hipótese tem a explicação da transformação, é prevista pelo Transformer antes de se conhecer o resultado, verificada independentemente por matemática determinística e só depois pode atualizar os pesos. O verificador não é o Transformer; uma resposta correta do verificador **não prova generalização neuronal**.
+
+## Dar controlo à pessoa que ensina
+
+Escreve naturalmente no terminal:
+
+```text
+tu> quero aprovar as hipóteses
+nord> Modo de revisão ligado. As hipóteses matemáticas aguardam aprovação.
+
+tu> 2+2 é 4
+nord> ... preparei hipóteses para verificar e aprender ...
+
+tu> mostra teorias
+nord> Quanto é 3 + 2? = 5 | review | e se acrescentar 1 ao primeiro número?
+
+tu> aprova hipótese 3+2
+nord> Aprovada. Será matematicamente verificada antes do treino.
+
+tu> rejeita hipótese 4+4
+nord> Bloqueei essa hipótese para novas revisões e atualizações de pesos.
+
+tu> pausa aprendizagem
+nord> Parei o treino autónomo e as simulações automáticas.
+
+tu> retoma aprendizagem
+nord> Reativei as experiências e o treino autónomo.
+```
+
+O modo de revisão de hipóteses matemáticas é **opcional**; por defeito, as hipóteses aritméticas verificadas treinam autonomamente. A pausa aplica-se a todas as atualizações autónomas, incluindo o simulador de movimento e a investigação. As instruções explícitas do professor continuam a poder ensinar mesmo com a autonomia pausada. O modo de revisão não bloqueia automaticamente o currículo autónomo de outras áreas; usa `pausa aprendizagem` para parar todo esse treino.
+
+Se disseres `3+2 é 8`, a conta é recusada pelo verificador; `3+2 é 5` é aceite. **Rejeitar uma hipótese depois de já ter sido treinada bloqueia experiências futuras, mas não desfaz os pesos anteriormente modificados.** A fila, as decisões do professor e os bloqueios sobrevivem ao reinício da aplicação.
+
+Existe ainda o laboratório comum da versão anterior: `experimenta tudo` (matemática, padrões, lógica, linguagem e mundo virtual) ou `experimenta lógica 2`. Na VM pequena, reduz experiências por ciclo usando as variáveis de ambiente indicadas abaixo.
+
 # Nord Brain V0.9 — hipóteses matemáticas e investigação com fontes primárias
 
 > **Experimental:** a Nord Brain tem dois subsistemas de aprendizagem: um Transformer linguístico pequeno com pesos treináveis e uma rede pequena que prevê consequências no mundo virtual. Nenhum deles tem o conhecimento inicial de um Qwen pré-treinado. Os verificadores fazem contas corretas, mas isso **não prova que o Transformer aprendeu matemática**. O desempenho neuronal é medido apenas com perguntas que não entraram no treino.

@@ -74,23 +74,124 @@ class Memory:
             url TEXT PRIMARY KEY, topic TEXT NOT NULL,
             lesson_id INTEGER NOT NULL, created INTEGER NOT NULL);
         ''')
+        self.db.executescript("""
+        CREATE TABLE IF NOT EXISTS cognitive_trials (
+            id INTEGER PRIMARY KEY,
+            domain TEXT NOT NULL,
+            question TEXT NOT NULL,
+            expected TEXT NOT NULL,
+            prediction TEXT NOT NULL,
+            evidence TEXT NOT NULL,
+            loss REAL NOT NULL,
+            correct_before INTEGER NOT NULL,
+            created INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS cognitive_probes (
+            domain TEXT NOT NULL,
+            question TEXT PRIMARY KEY,
+            answer TEXT NOT NULL,
+            created INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS cognitive_trials_domain ON cognitive_trials(domain);
+        """)
+        self.db.executescript("""
+        CREATE TABLE IF NOT EXISTS theory_explanations (
+            question TEXT PRIMARY KEY, explanation TEXT NOT NULL,
+            seed TEXT NOT NULL, created INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS training_blocks (
+            question TEXT PRIMARY KEY, reason TEXT NOT NULL, created INTEGER NOT NULL
+        );
+        """)
         self.db.commit()
 
+    def training_paused(self):
+        return self.get_meta('training_paused','0') == '1'
+
+    def review_required(self):
+        return self.get_meta('math_theory_review','0') == '1'
+
+    def pause_autonomy(self, paused: bool):
+        self.set_meta('training_paused','1' if paused else '0')
+
+    def set_review_mode(self, enabled: bool):
+        self.set_meta('math_theory_review','1' if enabled else '0')
+        with self.db:
+            self.db.execute("UPDATE math_hypotheses SET state=? WHERE state=?",
+                            ('review','pending') if enabled else ('pending','review'))
+
+    def is_training_blocked(self,question):
+        return self.db.execute(
+            'SELECT 1 FROM training_blocks WHERE lower(question)=lower(?)',
+            (question.strip(),)).fetchone() is not None
+
+    def block_training(self,question,reason='rejeitado pelo professor'):
+        with self.db:
+            self.db.execute('INSERT OR REPLACE INTO training_blocks VALUES(?,?,?)',
+                            (question.strip(),reason[:120],int(time.time())))
+            self.db.execute("UPDATE math_hypotheses SET state='blocked' WHERE lower(question)=lower(?)",
+                            (question.strip(),))
+
+    def theory_details(self,limit=10):
+        return self.db.execute("""SELECT m.question,m.expected,m.state,
+                 COALESCE(t.explanation,'hipótese aritmética'),m.prediction_before
+                 FROM math_hypotheses AS m LEFT JOIN theory_explanations AS t
+                   ON m.question=t.question
+                 ORDER BY CASE WHEN t.question IS NOT NULL THEN 0 ELSE 1 END, t.rowid, m.created DESC,m.question LIMIT ?""",(max(1,min(int(limit),40)),)).fetchall()
+
+    def approve_theory(self,question):
+        with self.db:
+            cur=self.db.execute("UPDATE math_hypotheses SET state='pending' WHERE question=? AND state IN ('review','blocked')",(question,))
+            if cur.rowcount:
+                self.db.execute('DELETE FROM training_blocks WHERE question=?',(question,))
+            return cur.rowcount == 1
+
+    def queue_theories(self,seed,items):
+        """Save verified mathematical counterfactuals, respecting user review."""
+        from .hypotheses import verified_value
+        from .experiments import reserved_math_probe
+        inserted=0
+        for question,expected,explanation in items[:48]:
+            if (self.is_holdout(question) or self.is_cognitive_probe(question)
+                    or reserved_math_probe(question) or self.is_training_blocked(question)
+                    or self.exact(question) is not None):
+                continue
+            expr=question.removeprefix('Quanto é ').removesuffix('?')
+            if verified_value(expr)!=expected:
+                continue
+            with self.db:
+                cur=self.db.execute("""INSERT OR IGNORE INTO math_hypotheses
+                     (question,expected,seed,state,created) VALUES(?,?,?,?,?)""",
+                     (question,expected,seed[:100],
+                      'review' if self.review_required() else 'pending',int(time.time())))
+                if cur.rowcount==1:
+                    inserted+=1
+                # Add an explanation even to a hypothesis already queued by
+                # earlier releases, without overwriting its state or outcome.
+                self.db.execute('INSERT OR IGNORE INTO theory_explanations VALUES (?,?,?,?)',
+                   (question,explanation[:180],seed[:100],int(time.time())))
+        return inserted
+
     def queue_math_hypotheses(self, seed: str, examples):
+        from .experiments import reserved_math_probe
         inserted=0
         for question, expected in list(examples)[:48]:
-            if self.is_holdout(question) or self.exact(question) is not None:
+            if (self.is_holdout(question) or self.is_cognitive_probe(question)
+                    or reserved_math_probe(question) or self.is_training_blocked(question)
+                    or self.exact(question) is not None):
                 continue
             with self.db:
                 row=self.db.execute('''INSERT OR IGNORE INTO math_hypotheses
                     (question,expected,seed,state,created) VALUES (?,?,?,'pending',?)''',
                     (question,expected,seed[:100],int(time.time())))
+                if self.review_required():
+                    self.db.execute("UPDATE math_hypotheses SET state='review' WHERE question=? AND state='pending'",(question,))
                 inserted+=int(row.rowcount==1)
         return inserted
 
     def pending_math_hypotheses(self, limit=3):
         return self.db.execute('''SELECT question,expected FROM math_hypotheses
-          WHERE state='pending' ORDER BY created,question LIMIT ?''',
+          WHERE state='pending' AND question NOT IN (SELECT question FROM training_blocks) ORDER BY created,question LIMIT ?''',
           (max(1,min(int(limit),12)),)).fetchall()
 
     def mark_math_hypothesis(self, question, prediction, state):
@@ -136,6 +237,58 @@ class Memory:
         rows=self.db.execute("SELECT term,description FROM concepts WHERE origin='teacher' LIMIT ?",(limit,)).fetchall()
         return [f'{t}: {d}' for t,d in rows]
 
+    def teacher_concepts(self, limit=30):
+        """Only what a human teacher explicitly provided, never web excerpts."""
+        return self.db.execute(
+            "SELECT term,description FROM concepts WHERE origin='teacher' ORDER BY term LIMIT ?",
+            (max(1,min(100,int(limit))),)).fetchall()
+
+    def teacher_has_concept(self, term):
+        return self.db.execute(
+            "SELECT 1 FROM concepts WHERE term=? AND origin='teacher'",
+            (term.strip().lower(),)).fetchone() is not None
+
+    def lesson_was_trained(self, question):
+        return self.db.execute(
+            "SELECT 1 FROM lessons WHERE lower(question)=lower(?)",
+            (question.strip(),)).fetchone() is not None
+
+    def reserve_cognitive_probe(self, domain, question, answer):
+        """Never designate an already-trained question as unseen."""
+        if self.lesson_was_trained(question):
+            return False
+        with self.db:
+            self.db.execute("""INSERT OR IGNORE INTO cognitive_probes
+                (domain,question,answer,created) VALUES(?,?,?,?)""",
+                (domain,question.strip(),answer,int(time.time())))
+        return True
+
+    def is_cognitive_probe(self, question):
+        return self.db.execute(
+            "SELECT 1 FROM cognitive_probes WHERE lower(question)=lower(?)",
+            (question.strip(),)).fetchone() is not None
+
+    def cognitive_probes(self, domain, limit=30):
+        return self.db.execute(
+            "SELECT question,answer FROM cognitive_probes WHERE domain=? ORDER BY created,question LIMIT ?",
+            (domain,max(1,min(100,int(limit))))).fetchall()
+
+    def cognitive_trial(self, domain, question, expected, prediction, evidence, loss, correct_before):
+        with self.db:
+            self.db.execute("""INSERT INTO cognitive_trials
+                (domain,question,expected,prediction,evidence,loss,correct_before,created)
+                VALUES(?,?,?,?,?,?,?,?)""",
+                (domain,question,expected,prediction,evidence,float(loss),int(correct_before),int(time.time())))
+            # Bounded history to avoid growing without limit on an SD card.
+            self.db.execute("""DELETE FROM cognitive_trials WHERE id IN (
+              SELECT id FROM cognitive_trials ORDER BY id DESC LIMIT -1 OFFSET 3000)""")
+
+    def cognitive_stats(self):
+        rows=self.db.execute("""SELECT domain,COUNT(*),SUM(correct_before),AVG(loss)
+                                  FROM cognitive_trials GROUP BY domain""").fetchall()
+        return {d:{'experiencias':n,'acertos_antes_treino':int(c or 0),
+                   'loss_media':round(float(loss),4)} for d,n,c,loss in rows}
+
     def add_reasoning_fact(self, subject, predicate, obj, statement, origin='teacher'):
         if predicate not in ('is_a','has') or origin!='teacher':
             raise ValueError('Apenas premissas confirmadas pelo professor')
@@ -164,6 +317,8 @@ class Memory:
         return int(cur.lastrowid)
 
     def exact(self, question: str):
+        if self.is_training_blocked(question):
+            return None
         row=self.db.execute("SELECT answer FROM lessons WHERE lower(question)=lower(?) AND origin NOT LIKE 'legacy_%' ORDER BY id DESC LIMIT 1",(question.strip(),)).fetchone()
         return row[0] if row else None
 
@@ -174,7 +329,7 @@ class Memory:
         return self.db.execute("SELECT COUNT(*) FROM lessons WHERE origin NOT LIKE 'legacy_%'").fetchone()[0]
 
     def lessons(self, limit=100):
-        return self.db.execute("SELECT question,answer FROM lessons WHERE origin NOT LIKE 'legacy_%' ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return self.db.execute("SELECT question,answer FROM lessons WHERE origin NOT LIKE 'legacy_%' AND question NOT IN (SELECT question FROM training_blocks) ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
 
     def concept(self, term: str, definition: str, origin='teacher'):
         term,definition=term.strip().lower(),definition.strip()

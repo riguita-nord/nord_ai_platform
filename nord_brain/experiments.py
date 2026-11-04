@@ -73,3 +73,17 @@ def curriculum(level: int = 0):
     Random(2026 + level).shuffle(training)
     Random(1526 + level).shuffle(tests)
     return training, tests
+
+
+def reserved_math_probe(question: str) -> bool:
+    """Conservative fixed math test split for teacher-triggered theories.
+
+    A hypothesis must not be trained before curriculum() has had a chance to
+    insert its held-out examples in SQLite. This uses the same input-only
+    partition as curriculum at every level.
+    """
+    import re
+    m = re.fullmatch(r'Quanto é (\d{1,3}) ([+×-]) (\d{1,3})\?',question)
+    if not m:return False
+    a,op,b=int(m[1]),m[2],int(m[3])
+    return (a*7+b*13+{'+':0,'-':1,'×':2}[op]*5)%9 == 8

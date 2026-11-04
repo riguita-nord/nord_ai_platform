@@ -67,3 +67,51 @@ def propose(expression: str, answer: str, limit: int = 32) -> list[tuple[str, st
         if len(unique) >= max(1,min(limit,48)):
             break
     return unique
+
+
+def explore_theories(expression: str, answer: str, limit: int = 40) -> list[tuple[str, str, str]]:
+    """Explore changes to the input and their predicted consequences.
+
+    A verified seed *starts* a search, not a table of the same answer. Each
+    proposal includes a human-readable counterfactual explanation. Labels are
+    calculated independently, and neither the teacher nor the neural model is
+    trusted to invent arithmetic truth.
+    """
+    match = _PAIR.fullmatch(expression)
+    if match is None or verified_value(expression) != str(answer):
+        return []
+    a, op, b = int(match[1]), match[2].replace('x', '*').replace('×', '*'), int(match[3])
+    if not (0 <= a <= 30 and 0 <= b <= 30):
+        return []
+    candidates = []
+    def add(x, operation, y, theory):
+        if not (0 <= x <= 35 and 0 <= y <= 35):
+            return
+        expr = f'{x} {operation} {y}'
+        outcome = verified_value(expr)
+        if outcome is not None:
+            candidates.append((f'Quanto é {expr}?', outcome, theory))
+    # Test differences, rather than overfitting to one fixed answer.
+    for amount in (1, 2):
+        add(a+amount, op, b, f'e se acrescentar {amount} ao primeiro número?')
+        add(a, op, b+amount, f'e se acrescentar {amount} ao segundo número?')
+        add(a-amount, op, b, f'e se retirar {amount} ao primeiro número?')
+        add(a, op, b-amount, f'e se retirar {amount} ao segundo número?')
+    add(b, op, a, 'e se trocar a ordem dos números?')
+    add(a+1, op, b-1, 'e se transferir 1 do segundo para o primeiro?')
+    add(a-1, op, b+1, 'e se transferir 1 do primeiro para o segundo?')
+    add(a+1, op, b+1, 'e se acrescentar 1 a ambos?')
+    add(a*2, op, b*2, 'e se duplicar ambos os números?')
+    for other in ('+', '-', '×'):
+        if other != op:
+            add(a,other,b,f'e se trocar a operação {op} por {other}?')
+    # Mix in regular exercises of varied outputs, not just nearby values.
+    for offset in range(3, 10):
+        add(a+offset, '+', b, f'e se aumentar o primeiro número em {offset}?')
+    distinct = []
+    seen = set()
+    for item in candidates:
+        if item[0] not in seen and item[0] != f'Quanto é {a} {op} {b}?':
+            seen.add(item[0])
+            distinct.append(item)
+    return distinct[:max(1, min(int(limit), 48))]

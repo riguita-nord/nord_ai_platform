@@ -49,6 +49,8 @@ class AutoSettings:
     world_simulations: bool = True
     world_scenarios: int = 3
     hypotheses_per_tick: int = 3
+    cognitive_lab: bool = False  # explicit AutoSettings keeps legacy tests stable; from_env enables it
+    cognitive_tasks_per_tick: int = 1
 
     @classmethod
     def from_env(cls):
@@ -62,7 +64,9 @@ class AutoSettings:
                    examples_per_tick=integer('NORD_MATH_EXAMPLES_PER_TICK',4,1,12),
                    world_simulations=on('NORD_WORLD_SIM',True),
                    world_scenarios=integer('NORD_WORLD_SCENARIOS',3,1,10),
-                   hypotheses_per_tick=integer('NORD_HYPOTHESES_PER_TICK',3,1,8))
+                   hypotheses_per_tick=integer('NORD_HYPOTHESES_PER_TICK',3,1,8),
+                   cognitive_lab=on('NORD_COGNITIVE_LAB',True),
+                   cognitive_tasks_per_tick=integer('NORD_COGNITIVE_TASKS',1,1,3))
 
 
 class Autonomy:
@@ -96,6 +100,9 @@ class Autonomy:
         self._ticks+=1
         settings=self.settings
         brain=self.brain
+        with brain.lock:
+            if brain.memory.training_paused():
+                return
         # Do not block the interactive terminal on an Internet request.
         if settings.research and self._ticks%3==0:
             with brain.lock:
@@ -114,12 +121,14 @@ class Autonomy:
         if not settings.training:
             return
         with brain.lock:
+            if brain.memory.training_paused():
+                return
             # Hypothesis lab follows the teacher's 2+2=4 seed: generate novel
             # equivalent/contrast equations, predict, VERIFY, then train.
             # Source questions and held-out math test questions are excluded.
             for question,expected in brain.memory.pending_math_hypotheses(settings.hypotheses_per_tick):
-                if brain.memory.is_holdout(question):
-                    brain.memory.mark_math_hypothesis(question,'heldout','rejected')
+                if brain.memory.is_holdout(question) or brain.memory.is_cognitive_probe(question) or brain.memory.is_training_blocked(question):
+                    brain.memory.mark_math_hypothesis(question,'heldout/blocked','rejected')
                     continue
                 proof=math_question(question)
                 checked=(proof.steps[-1].split(' = ')[-1] if proof and proof.steps else None)
@@ -163,7 +172,7 @@ class Autonomy:
                     for _ in range(settings.examples_per_tick):
                         question,answer=training[cursor%len(training)]
                         cursor+=1
-                        if brain.memory.is_holdout(question):
+                        if brain.memory.is_holdout(question) or brain.memory.is_cognitive_probe(question) or brain.memory.is_training_blocked(question):
                             continue
                         loss=brain.core.train(question,answer,epochs=1)
                         completed.append((question,answer,loss))
@@ -201,6 +210,21 @@ class Autonomy:
                             brain.memory.event('reasoning_practice','teacher-grounded deduction')
                         except ValueError as e:
                             brain.memory.event('reasoning_skipped',str(e)[:140])
+            # Cross-domain lab: one extra verified neural prediction/update
+            # per cycle by default. Never learn model-invented "correct" text.
+            if settings.cognitive_lab:
+                rotation=('padroes','linguagem','logica','matematica')
+                for offset in range(settings.cognitive_tasks_per_tick):
+                    domain=rotation[(self._ticks-1+offset)%len(rotation)]
+                    result=brain.cognition.trial(domain)
+                    if result.get('status')=='treinado':
+                        brain.memory.event('cognitive_training',
+                            f"{domain}: predicted_correct={result['neural_correct_before']}",
+                            float(result['neural_correct_before']))
+                # Probes are frozen; neural answers alone count as correct.
+                if self._ticks%8==0:
+                    for domain in ('padroes','linguagem','logica'):
+                        brain.cognition.evaluate(domain,limit=2)
             # Replay is also learning: old examples are reintroduced without an
             # extra teacher command. Keep CPU use small on 1-vCPU machines.
             recent=brain.memory.lessons(8)

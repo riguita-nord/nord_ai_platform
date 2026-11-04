@@ -16,11 +16,13 @@ from .vocabulary import initialize
 from .conversation import Intent, interpret, is_self_knowledge_request
 from .self_knowledge import report as self_knowledge_report
 from .natural_math import read_math_question, read_math_example
-from .hypotheses import propose
+from .hypotheses import propose, explore_theories
 from .autonomy import Autonomy
 from .internet import search, OFFICIAL
 from .reasoning import ReasoningEngine, parse_fact
 from .world import WorldMind
+from .theory_control import route_control
+from .cognition import CognitiveLab
 
 
 class Brain:
@@ -43,6 +45,7 @@ class Brain:
         # Separate CPU-trainable predictive brain for sensorimotor experiences.
         # Its weights are trained from transitions, never injected via chat context.
         self.world=WorldMind(self.data_dir/'world-model-v1.pt')
+        self.cognition=CognitiveLab(self)
         self.last_question=None
         self.awaiting_explanation=False
         self.autonomy=Autonomy(self)
@@ -80,12 +83,16 @@ class Brain:
             # An example is the beginning of a hypothesis-search task. These
             # NEW expressions are verified and trained during autonomous ticks,
             # not inserted into the chat context as if already understood.
+            # Record counterfactual reasoning first, so the evidence explaining
+            # a hypothesis is retained even when generic exercises overlap.
+            theories=explore_theories(example.expression,example.actual)
+            queued_theories=self.memory.queue_theories(example.expression,theories)
             queued=self.memory.queue_math_hypotheses(
                 example.expression, propose(example.expression, example.actual))
             self.memory.event('hypothesis_seed',
-                              f'{example.expression}={example.actual}; queued={queued}',queued)
+                              f'{example.expression}={example.actual}; queued={queued}; theories={queued_theories}',queued+queued_theories)
             return (f'Correto: {example.proof.answer} '
-                    f'Registei o exemplo verificado. Preparei {queued} novas hipóteses para experimentar e aprender '
+                    f'Registei o exemplo verificado. Preparei {queued+queued_theories} hipóteses, incluindo acrescentar e retirar números, para verificar e aprender '
                     'nos próximos ciclos. Ainda não considero isso compreensão matemática.'), 'cálculo verificado + laboratório de hipóteses'
         solved=read_math_question(message)
         if solved is not None:
@@ -128,7 +135,9 @@ class Brain:
         question,answer=question.strip(),answer.strip()
         if not 1<=len(question)<=250 or not 1<=len(answer)<=500:
             raise ValueError('Exemplo vazio ou demasiado longo (250/500 caracteres)')
-        if self.memory.is_holdout(question):
+        if self.memory.is_training_blocked(question):
+            raise ValueError('Treino desta pergunta bloqueado pelo utilizador')
+        if self.memory.is_holdout(question) or self.memory.is_cognitive_probe(question):
             raise ValueError('Este exemplo está reservado para avaliação independente')
         self.core.save()
         try:
@@ -168,6 +177,21 @@ class Brain:
     def chat(self,message: str) -> tuple[str,str]:
         """Teacher-facing conversation. Intents are explicit, limited heuristics."""
         with self.lock:
+            control=route_control(self,message)
+            if control is not None:
+                self.awaiting_explanation=False
+                self.last_question=None
+                return control
+            # Unified hypothesis lab works across independently verifiable
+            # arithmetic, patterns, logic, teacher language and virtual actions.
+            lab = re.fullmatch(
+                r'(?:experimenta|experimentar|simula|simular|testa|treina)\s+'
+                r'(tudo|matem[aá]tica|padr[oõ]es|l[oó]gica|linguagem|mundo)'
+                r'(?:\s+(\d{1,2}))?[.?!]?',message.strip(),re.I)
+            if lab:
+                aliases={'matemática':'matematica','padrões':'padroes','lógica':'logica'}
+                domain=aliases.get(lab.group(1).casefold(),lab.group(1).casefold())
+                return self.simulate_cognition(domain,int(lab.group(2) or '1'))
             # A virtual-world experiment is not a scripted answer: it actually
             # imagines four actions, executes one, and trains the world weights.
             sim = re.fullmatch(
@@ -290,6 +314,12 @@ class Brain:
                 self.memory.unknown(intent.question[:90])
             return reply,source
 
+    def simulate_cognition(self, domain: str = 'tudo', examples: int = 1):
+        """Train and evaluate different hypotheses with one shared protocol."""
+        with self.lock:
+            result=self.cognition.run(domain,examples=examples)
+            return self.cognition.describe(result),'laboratório multiarea: previsões neuronais e verificadores distintos'
+
     def simulate_world(self, scenarios: int = 3):
         """Compare imagined actions, execute in a simulator, update real weights."""
         with self.lock:
@@ -335,6 +365,7 @@ class Brain:
                     'passos_de_treino':self.core.steps,
                     'exemplos_ensinados':self.memory.lesson_count(),
                     'premissas_de_raciocinio':self.memory.reasoning_fact_count(),
+                    'laboratorio_de_hipoteses':self.memory.cognitive_stats(),
                     'modelo_de_mundo':{'parametros':self.world.parameter_count,
                                        'experiencias':self.world.observations,
                                        'passos_de_aprendizagem':self.world.train_steps,
@@ -344,6 +375,8 @@ class Brain:
                     'autonomia':asdict(self.autonomy.settings),
                     'eventos_autonomos':self.memory.recent_events(5),
                     'hipoteses_matematicas':self.memory.hypothesis_stats(),
+                    'aprendizagem_autonoma_pausada':self.memory.training_paused(),
+                    'aprovacao_de_hipoteses':self.memory.review_required(),
                     'fontes_oficiais_treinadas':self.memory.source_count(),
                     'dados':str(self.data_dir)}
 
