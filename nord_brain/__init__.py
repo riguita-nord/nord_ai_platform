@@ -1,2 +1,2 @@
-"""Nord Brain: small experimental Transformer with continual learning."""
-__version__='1.5.0'
+"""Nord Brain: own-weights Transformer and experimental lifelong learning."""
+__version__="1.6.0"

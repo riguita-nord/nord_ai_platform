@@ -25,6 +25,7 @@ from .theory_control import route_control
 from .cognition import CognitiveLab
 from .creative import creative_request, story
 from .language_backend import LocalLanguage
+from .story_studio import StoryStudio, BookCommand, parse_book_command
 
 
 class Brain:
@@ -49,6 +50,7 @@ class Brain:
         self.world=WorldMind(self.data_dir/'world-model-v1.pt')
         self.cognition=CognitiveLab(self)
         self.language=LocalLanguage()
+        self.stories=StoryStudio(self.data_dir)
         self._greeting_index=-1
         self.last_question=None
         self.last_research=None
@@ -249,6 +251,13 @@ class Brain:
                 self.awaiting_explanation=False
                 self.last_question=None
                 return control
+            # Long fiction is persisted chapter by chapter and is never
+            # confused with teacher knowledge or neural training examples.
+            book_command=parse_book_command(message)
+            if book_command is not None:
+                self.awaiting_explanation=False
+                self.last_question=None
+                return self.book_operation(book_command)
             # Creative requests are not questions awaiting teacher facts.
             # Prefer pretrained local CPU inference; retain a clearly labelled
             # procedural fallback if no local language model is installed.
@@ -436,6 +445,57 @@ class Brain:
                         'ou pedir que pesquise fontes públicas?'), 'sem resposta factual verificada'
             return reply,source
 
+    def book_operation(self,command: BookCommand):
+        """Manage persistent manuscripts, with one bounded generation per chapter."""
+        with self.lock:
+            if command.action=='start':
+                book=self.stories.create(command.topic,chapters=command.amount)
+                output=self.stories.continue_book(self.language,1)
+                chapter=output['chapters'][0]
+                return (f'Comecei o livro «{book["title"]}» ({book["planned"]} capítulos).\n'
+                        f'Capítulo {chapter["number"]} — {chapter["title"]}\n\n'
+                        f'{chapter["body"]}\n\n'
+                        'Para escrever o seguinte, diz «continua a história» ou usa /livro continuar. '
+                        'O manuscrito é guardado entre sessões.'), 'livro persistente; '+chapter['source']
+            if command.action=='continue':
+                output=self.stories.continue_book(self.language,command.amount)
+                if 'error' in output:return output['error'],'estúdio de histórias'
+                if not output['chapters']:
+                    return ('O livro já tem todos os capítulos planeados. '
+                            'Usa /livro exportar para guardar o manuscrito.'),'estúdio de histórias'
+                chapter_text='\n\n'.join(
+                    f'Capítulo {c["number"]} — {c["title"]}\n\n{c["body"]}' for c in output['chapters'])
+                book=output['book']
+                return (chapter_text+f'\n\nLivro: {book["written"]}/{book["planned"]} capítulos escritos. '
+                        'Podes continuar, reler capítulos ou exportar o manuscrito.'), 'livro persistente; '+', '.join(sorted({c['source'] for c in output['chapters']}))
+            if command.action=='status':
+                b=self.stories.active()
+                if not b:return 'Ainda não existe um livro. Diz «cria um livro sobre ...».','estúdio de histórias'
+                from .story_studio import _chapter_outline
+                outline='\n'.join(f'  {n}. {_chapter_outline(b["planned"],n)[0]}'
+                                  for n in range(1,b['planned']+1))
+                return (f'{b["title"]} — {b["written"]}/{b["planned"]} capítulos escritos.\n'
+                        f'Tema: {b["theme"]}\nPlano:\n{outline}'), 'plano narrativo persistente'
+            if command.action=='list':
+                books=self.stories.list_books()
+                if not books:return 'Ainda não tens livros guardados.','estúdio de histórias'
+                return ('Livros guardados:\n'+'\n'.join(
+                    f'  #{ident}: {title} ({written}/{planned} capítulos)'
+                    for ident,title,planned,written in books)), 'biblioteca local de histórias'
+            if command.action=='select':
+                b=self.stories.select(command.amount)
+                return (f'Retomei «{b["title"]}» ({b["written"]}/{b["planned"]}).' if b
+                        else 'Não encontrei esse livro.'), 'biblioteca local de histórias'
+            if command.action=='read':
+                row=self.stories.chapter(command.amount)
+                return (f'Capítulo {command.amount} — {row[0]}\n\n{row[1]}' if row
+                        else 'Esse capítulo ainda não existe no livro ativo.'), 'manuscrito guardado'
+            if command.action=='export':
+                output=self.stories.export()
+                return (f'Manuscrito exportado em Markdown: {output}' if output else
+                        'Ainda não existe um livro para exportar.'), 'ficheiro Markdown local'
+            raise ValueError('Comando de livro desconhecido')
+
     def simulate_cognition(self, domain: str = 'tudo', examples: int = 1):
         """Train and evaluate different hypotheses with one shared protocol."""
         with self.lock:
@@ -501,6 +561,7 @@ class Brain:
                     'aprovacao_de_hipoteses':self.memory.review_required(),
                     'fontes_oficiais_treinadas':self.memory.source_count(),
                     'linguagem_local':self.language.status(),
+                    'livro_ativo':self.stories.active(),
                     'dados':str(self.data_dir)}
 
     def close(self):
@@ -508,4 +569,5 @@ class Brain:
         with self.lock:
             self.core.save()
             self.world.save()
+            self.stories.close()
             self.memory.close()

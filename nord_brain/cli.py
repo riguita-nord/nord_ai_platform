@@ -14,6 +14,9 @@ HELP='''Fala normalmente comigo. Exemplos:
   Quando eu perguntar como te chamas?, responde Nord Brain.
   Não, a resposta correta é outra.
   O que aprendeste?
+  Cria um livro sobre uma cidade no espaço. (escreve por capítulos)
+  Conta-me uma história longa com 12 capítulos sobre robôs.
+  Continua a história. / Mostra capítulo 2. / Lista livros.
   Quem é Elon Musk? / Pesquisa sobre um tema. (fontes públicas; não são verdades confirmadas)\n  Confirma fonte 1. (aprendizagem neuronal após a tua validação)
   2+2 é 4. (gera hipóteses matemáticas e treina autonomamente)
   Simula 3 cenários.  (testa 4 ações e aprende com as consequências)
@@ -28,6 +31,14 @@ Comandos técnicos opcionais: /cerebro, /avaliar, /ajuda, /sair
   /treinar-portugues 20    (treino REAL nos pesos, CPU, com avaliação separada)
   /avaliar-portugues      (perda em frases não usadas no currículo)
   /diagnostico-pesquisa   (testar pesquisa na Internet e fornecedores)
+  /livro novo <tema>        (começa um romance de 10 capítulos)
+  /livro novo 12 <tema>     (escolhe o número de capítulos, 3–24)
+  /livro continuar [1-3]  (escreve e guarda novos capítulos)
+  /livro estado           (plano e progresso)
+  /livro listar           (livros guardados)
+  /livro selecionar <id>  (retomar um livro anterior)
+  /livro ler <n>          (reler um capítulo)
+  /livro exportar         (exporta Markdown para a pasta local)
   /diagnostico-linguagem  (verificar modelo linguístico local)
 A aprendizagem, a revisão e a decisão experimental de crescimento funcionam
 sem comandos, conforme os limites e testes configurados. A rede começa sem
@@ -77,6 +88,32 @@ def handle(brain,line):
         return search_diagnostic(term)
     if line=='/diagnostico-linguagem':
         return 'Modelo de linguagem: '+brain.language.status()+'. O treino do Transformer Nord é separado.'
+    if line.startswith('/livro'):
+        from .story_studio import BookCommand
+        args=line[len('/livro'):].strip().split()
+        if not args or args[0] in ('ajuda','help'):
+            return ('Usa /livro novo [3-24] <tema>, /livro continuar [1-3], '
+                    '/livro estado, /livro listar, /livro selecionar <id>, '
+                    '/livro ler <n> ou /livro exportar.')
+        op=args[0].casefold()
+        if op in ('novo','criar'):
+            chapters=int(args[1]) if len(args)>1 and args[1].isdigit() else 10
+            start=2 if len(args)>1 and args[1].isdigit() else 1
+            theme=' '.join(args[start:]).strip()
+            return brain.book_operation(BookCommand('start',theme,chapters))[0]
+        if op in ('continuar','continua'):
+            return brain.book_operation(BookCommand('continue',amount=int(args[1]) if len(args)>1 else 1))[0]
+        if op in ('estado','plano'):
+            return brain.book_operation(BookCommand('status'))[0]
+        if op in ('listar','lista'):
+            return brain.book_operation(BookCommand('list'))[0]
+        if op in ('selecionar','abrir') and len(args)==2:
+            return brain.book_operation(BookCommand('select',amount=int(args[1])))[0]
+        if op in ('ler','mostrar') and len(args)==2:
+            return brain.book_operation(BookCommand('read',amount=int(args[1])))[0]
+        if op in ('exportar','guardar'):
+            return brain.book_operation(BookCommand('export'))[0]
+        raise ValueError('Comando de livro inválido. Usa /livro ajuda.')
     if line=='/ajuda':return HELP
     if line=='/cerebro':return json.dumps(brain.status(),ensure_ascii=False,indent=2)
     if line=='/avaliar':
@@ -91,7 +128,7 @@ def main(argv=None):
     parser.add_argument('--data',type=Path,default=Path(os.environ.get('NORD_DATA',str(Path.home()/'.nord-brain'))))
     args=parser.parse_args(argv)
     brain=Brain(args.data)
-    print('Nord Brain v1.5 | linguagem local opcional + Transformer próprio + aprendizagem experimental')
+    print('Nord Brain v1.6 | livros por capítulos + linguagem local opcional + aprendizagem experimental')
     print('Fala normalmente. Escreve /ajuda para exemplos ou /sair para terminar.')
     try:
         while True:

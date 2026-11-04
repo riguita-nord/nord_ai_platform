@@ -1,3 +1,63 @@
+# Nord Brain V1.6 — romances e histórias longas por capítulos
+
+A Nord Brain agora dispõe de um **estúdio de histórias persistente**. Ao contrário do pedido de conto curto, um livro é desenvolvido em capítulos, com plano de enredo, protagonista, cenário, conflito e resumos do que aconteceu. Os capítulos continuam disponíveis depois de reiniciares o programa. A ficção **não é gravada como conhecimento factual nem usada automaticamente no treino neuronal**.
+
+## Conversa normal
+
+```text
+tu> Cria um livro sobre uma máquina que descobre a própria cidade.
+nord> Comecei o livro ... (10 capítulos)
+      Capítulo 1 — A primeira pista
+      [texto do capítulo]
+
+tu> Continua a história
+nord> Capítulo 2 — A porta entreaberta
+      [novo capítulo, continuando o anterior]
+
+tu> Plano do livro
+nord> ... 2/10 capítulos, plano completo ...
+
+tu> Mostra capítulo 1
+nord> [capítulo guardado]
+
+tu> Exporta o livro
+nord> Manuscrito exportado em Markdown: .../books/livro-001.md
+```
+
+Também podes escrever `Conta-me uma história longa com 12 capítulos sobre robôs`, `Cria um romance de 8 capítulos sobre uma aventura` ou `Continua mais 2 capítulos`.
+
+## Comandos /livro
+
+```text
+/livro novo O mistério de uma estação abandonada
+/livro novo 12 Um robô que aprende a pintar
+/livro continuar 2
+/livro estado
+/livro listar
+/livro selecionar 1
+/livro ler 3
+/livro exportar
+```
+
+- **Planeamento:** de 3 a 24 capítulos por livro; 10 por defeito. Cada pedido escreve o primeiro ou até três capítulos adicionais, limitando o trabalho em CPU.
+- **Continuidade:** `stories.sqlite3` guarda vários projetos de livros, capítulos e resumos compactos para o modelo continuar sem reenviar um romance inteiro a cada pedido.
+- **Texto:** com `llama.cpp`/Qwen local ativo, cada capítulo é gerado pelo modelo com contexto narrativo; sem o modelo, há um **fallback procedural**, de qualidade e variedade muito mais limitadas, mas que não devolve "não sei contar histórias".
+- **Tamanho:** `NORD_STORY_CHAPTER_TOKENS=650` por defeito (200–1050) controla a geração por capítulo. Valores maiores consomem mais CPU, RAM/contexto e demoram mais. O modelo pode escrever menos do que o solicitado.
+- **Exportação:** o manuscrito Markdown é guardado em `~/.nord-brain/books/livro-NNN.md` (ou na pasta indicada por `NORD_DATA`). O original continua na base SQLite. Não existe envio automático de ficheiros para a Internet.
+- **Limites:** o planeamento mantém a estrutura, mas um Qwen 0.6B pode repetir ideias ou contradizer detalhes em livros muito longos. A continuação é um novo pedido de geração; não há escrita em background. Para obter melhor prosa, inicia o servidor linguístico com `bash scripts/start-local-language.sh` e confirma em `/diagnostico-linguagem`.
+
+## Atualização
+
+```bash
+cd ~/nord_ai_platform
+git pull origin main
+./nord
+```
+
+Testes locais: `python -m unittest discover -s tests -v` (com as dependências instaladas).
+
+---
+
 # Nord Brain v1.5 — histórias, conversa em português e diagnóstico de pesquisa
 
 Esta atualização corrige o bloqueio de pedidos criativos e a falta de variedade nas saudações e acrescenta uma segunda pesquisa sem chave. **O Transformer original da Nord Brain continua experimental** e não se transforma num modelo fluente só porque a perda diminuiu. Para conversa e escrita realmente naturais, a V1.5 pode usar **um modelo Qwen3-0.6B quantizado localmente em CPU**, mantendo o cérebro próprio, a memória e os seus pesos separados.

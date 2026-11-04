@@ -37,20 +37,23 @@ class LocalLanguage:
     def __init__(self):
         self.history: list[dict[str,str]]=[]
 
-    def generate(self, prompt: str, *, creative: bool=False, max_tokens: int=320) -> str | None:
+    def generate(self, prompt: str, *, creative: bool=False, max_tokens: int=320, remember: bool=True) -> str | None:
         if os.getenv('NORD_LLM', 'on').lower() in ('0','false','off','no'):
             return None
         endpoint=_endpoint()
-        messages=[{'role':'system','content':SYSTEM}]+self.history[-8:]+[
+        messages=[{'role':'system','content':SYSTEM}]+(self.history[-8:] if remember else [])+[
             {'role':'user','content':prompt[:2000]}]
         body=json.dumps({'model':os.getenv('NORD_LLM_MODEL','local'),
-            'messages':messages,'stream':False,'max_tokens':max(48,min(800,max_tokens)),
+            'messages':messages,'stream':False,'max_tokens':max(48,min(1200,max_tokens)),
             'temperature':0.9 if creative else 0.7,'top_p':0.92,
             'chat_template_kwargs':{'enable_thinking':False}},ensure_ascii=False).encode('utf-8')
         req=request.Request(endpoint,data=body,headers={
             'Content-Type':'application/json','Accept':'application/json'},method='POST')
         try:
-            with request.build_opener(request.ProxyHandler({})).open(req,timeout=38) as resp:
+            default_timeout=90 if creative else 38
+            try:timeout=max(5,min(180,int(os.getenv('NORD_LLM_TIMEOUT',str(default_timeout)))))
+            except ValueError:timeout=default_timeout
+            with request.build_opener(request.ProxyHandler({})).open(req,timeout=timeout) as resp:
                 raw=resp.read(600001)
         except (ConnectionError,OSError,TimeoutError,ValueError,error.HTTPError):
             return None
@@ -64,9 +67,10 @@ class LocalLanguage:
             if not result or len(result)>12000:return None
         except (TypeError,ValueError,KeyError,IndexError):
             return None
-        self.history.extend([{'role':'user','content':prompt[:350]},
-                             {'role':'assistant','content':result[:900]}])
-        self.history=self.history[-8:]
+        if remember:
+            self.history.extend([{'role':'user','content':prompt[:350]},
+                                 {'role':'assistant','content':result[:900]}])
+            self.history=self.history[-8:]
         return result
 
     def status(self) -> str:
