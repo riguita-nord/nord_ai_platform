@@ -77,6 +77,17 @@ class RuntimeSelfKnowledgeTests(unittest.TestCase):
         self.assertIsNone(self.brain.last_question)
         self.assertFalse(self.brain.awaiting_explanation)
 
+    def test_unknown_self_attribute_and_taught_answer_priority(self):
+        for question in ('Qual é a tua cor favorita?', 'Tens irmãos?', 'Como te sentes?'):
+            reply,origin=self.brain.chat(question)
+            self.assertIn('não tenho informação verificada',reply.lower())
+            self.assertIn('autoconhecimento',origin)
+        # Existing teacher knowledge must take priority over the fallback.
+        self.brain.memory.teach('qual é a tua cor?', 'azul', origin='teacher')
+        reply,origin=self.brain.chat('qual é a tua cor?')
+        self.assertEqual(reply, 'azul')
+        self.assertIn('memória ensinada',origin)
+
     def test_memory_report_changes_with_actual_learning(self):
         before,_=self.brain.chat('O que tens na memória?')
         self.assertNotIn('linguagem de programação',before)

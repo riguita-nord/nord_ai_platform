@@ -225,6 +225,10 @@ class Brain:
             if not neural_only:
                 self_kind=self_query_kind(question)
                 if self_kind is not None:
+                    if self_kind == 'unknown':
+                        taught=self.memory.exact(question)
+                        if taught is not None:
+                            return taught, 'memória ensinada sobre a própria Nord Brain'
                     self.last_question=None
                     return self_knowledge_respond(self,self_kind), 'autoconhecimento local verificado'
                 solved=read_math_question(question)
@@ -254,8 +258,17 @@ class Brain:
             # numbers, web research, or another teacher answer.
             self_kind=self_query_kind(message)
             if self_kind is not None:
-                self.awaiting_explanation=False
-                self.last_question=None
+                if self_kind == 'unknown':
+                    taught=self.memory.exact(message)
+                    if taught is not None:
+                        self.awaiting_explanation=False
+                        self.last_question=None
+                        return taught, 'memória ensinada sobre a própria Nord Brain'
+                    self.last_question=message.strip()
+                    self.awaiting_explanation=True
+                else:
+                    self.awaiting_explanation=False
+                    self.last_question=None
                 return self_knowledge_respond(self,self_kind), 'autoconhecimento local verificado'
             # Unified hypothesis lab works across independently verifiable
             # arithmetic, patterns, logic, teacher language and virtual actions.

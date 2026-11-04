@@ -137,6 +137,14 @@ def self_query_kind(message: str) -> str | None:
              'tens consciencia', 'sentes alguma coisa', 'es viva',
              'tens vontade propria', 'tens opinioes proprias'):
         return 'experience'
+    # An unknown personal attribute must not be fabricated or sent to a
+    # public search engine. Keep generic self-directed questions local.
+    if q == 'qual e a tua versao do script':
+        return None
+    if (re.match(r'^(?:qual|quais)\b.*\b(?:tua|teu|tuas|teus)\b', q)
+            or re.match(r'^(?:como|onde|quando|por que|porque)\s+te\b', q)
+            or re.match(r'^(?:tens|sentes|gostas|preferes|acreditas|conheces)\s+[a-z]', q)):
+        return 'unknown'
     return None
 
 def _means_self_knowledge(description: str) -> bool:
