@@ -128,6 +128,10 @@ def interpret(message: str, last_question: str | None = None, awaiting_explanati
     if m:
         text=clean(m[1])
         return _fact(text) or Intent('statement',answer=text)
+    # Open-ended factual questions should NEVER become asserted teacher facts
+    # just because they omit punctuation (e.g. 'quem é Elon Musk').
+    if re.match(r'^(?:quem|onde|quando|qual|quais|como|por\s+que|porque|o\s+que)\b',text,re.I):
+        return Intent('question',text)
     if text.endswith('?'):
         return Intent('question',text)
     fact=_fact(text)

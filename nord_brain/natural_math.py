@@ -57,7 +57,11 @@ def read_math_question(message: str) -> tuple[str, Reasoning] | None:
     if len(stripped) > 150:
         return None
     matched = _PREFIX.match(stripped)
-    expression = _as_expression(stripped[matched.end():] if matched else stripped)
+    # Conversational follow-up: 'e 3+5?' is another calculation, not prose.
+    candidate = stripped[matched.end():] if matched else stripped
+    if not matched and re.match(r'^e\s+', candidate, re.I):
+        candidate = re.sub(r'^e\s+', '', candidate, flags=re.I)
+    expression = _as_expression(candidate)
     if expression is None:
         return None
     solution = calculate(expression)

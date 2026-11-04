@@ -18,7 +18,7 @@ from .self_knowledge import report as self_knowledge_report
 from .natural_math import read_math_question, read_math_example
 from .hypotheses import propose, explore_theories
 from .autonomy import Autonomy
-from .internet import search, OFFICIAL
+from .internet import search, OFFICIAL, public_question
 from .reasoning import ReasoningEngine, parse_fact
 from .world import WorldMind
 from .theory_control import route_control
@@ -47,6 +47,7 @@ class Brain:
         self.world=WorldMind(self.data_dir/'world-model-v1.pt')
         self.cognition=CognitiveLab(self)
         self.last_question=None
+        self.last_research=None
         self.awaiting_explanation=False
         self.autonomy=Autonomy(self)
         if start_autonomy:self.autonomy.start()
@@ -130,6 +131,69 @@ class Brain:
             trained+=1
         return trained
 
+    def _research_public(self,topic: str, question: str):
+        """Research is evidence discovery, not free-form neural generation.
+
+        Returns links and snippets without asserting that one webpage is truth.
+        Sources are not trained until the teacher approves a specific result.
+        """
+        self.awaiting_explanation=False
+        self.last_question=question
+        if os.getenv('NORD_INTERNET','on').lower() in ('off','0','false','no'):
+            return ('A Internet está desativada (NORD_INTERNET=off). Não vou inventar uma resposta.',
+                    'sem Internet')
+        results=search(topic)
+        self.last_research=None
+        if not results:
+            self.memory.unknown(topic)
+            return ('Não encontrei fontes úteis sobre esse tema. A pesquisa pública pode estar indisponível '
+                    'na rede, ou a fonte não apareceu nos resultados. Não vou inventar uma resposta. '
+                    'Podes ensinar-me um facto ou configurar NORD_BRAVE_API_KEY para pesquisa com API.'), 'pesquisa sem resultados'
+        # Preserve the former opt-in research pipeline for the four strictly
+        # pinned official documentation pages. Broader search snippets are
+        # NEVER admitted as autonomous neural labels without teacher review.
+        official_training=self.absorb_official_sources(topic,results)
+        for item in results:
+            if item.get('source_tier')!='official_primary':
+                self.memory.observation(topic,item['title'],item['url'],item['summary'])
+        self.last_research={'question':question,'topic':topic,'results':results}
+        lines=[f'Encontrei estas informações sobre {topic} (ainda não confirmadas):']
+        if results[0].get('source_tier')=='official_primary':
+            lines.append(f'Fonte oficial selecionada; exemplos treinados agora: {official_training}.')
+        for index,item in enumerate(results[:3],1):
+            lines.append(f'[{index}] {item["title"]}: {item["summary"][:290]}')
+            lines.append(f'    Fonte: {item["url"]}')
+        lines.append('Estes são excertos de pesquisa, não conhecimentos aprendidos nos pesos. '
+                     'Para validares uma fonte e ensiná-la, diz «confirma fonte 1»; '
+                     'para corrigir, explica-me o facto correto.')
+        return '\n'.join(lines),'pesquisa pública com fontes; ainda não validada'
+
+    def _confirm_public(self,index: int):
+        if not self.last_research:
+            return ('Não tenho uma pesquisa pendente para confirmar. Pesquisa primeiro o tema.',
+                    'sem pesquisa pendente')
+        record=self.last_research
+        if not 1<=index<=len(record['results']):
+            return ('Esse número de fonte não existe na última pesquisa.', 'fonte desconhecida')
+        item=record['results'][index-1]
+        answer=item['summary'][:280].strip()
+        if len(answer)<18:
+            return ('Esta fonte não contém informação suficiente para aprender.', 'fonte insuficiente')
+        # The user explicitly validates the selected excerpt. The content
+        # is still attributed; train a real gradient update, NOT prompt context.
+        question=record['question']
+        if self.memory.is_holdout(question) or self.memory.is_cognitive_probe(question):
+            return ('Esta pergunta está reservada para avaliação, por isso não posso treiná-la.', 'teste protegido')
+        self._learn(question,answer,epochs=1,origin='teacher_confirmed_research')
+        topic=record['topic']
+        if len(topic)<=60:
+            self.memory.concept(topic,answer[:300],origin='teacher')
+        self.memory.event('research_confirmed',item['url'])
+        self.last_research=None
+        return (f'Confirmação registada. Atualizei os pesos com a informação que validaste sobre {topic}. '
+                'O excerto continua associado à fonte '+item['url']+'. '
+                'Isto é treino real, mas ainda não demonstra compreensão ou generalização.'), 'revisão do utilizador + treino neuronal'
+
     def _learn(self,question,answer,epochs=1,origin='teacher'):
         """Actual online gradient update followed by durable persistence."""
         question,answer=question.strip(),answer.strip()
@@ -204,6 +268,18 @@ class Brain:
             math=self._checked_math(message)
             if math is not None:
                 return math
+            confirmation=re.fullmatch(r'(?:confirma|aprova|guarda)\s+(?:a\s+)?fonte\s+(\d{1,2})[.!]?',message.strip(),re.I)
+            if confirmation:
+                return self._confirm_public(int(confirmation[1]))
+            topic=public_question(message)
+            if topic and not is_self_knowledge_request(message):
+                concept=self.memory.lookup_concept(topic)
+                if concept:
+                    return concept,'conceito ensinado (memória)'
+                stored=self.memory.exact(message)
+                if stored is not None:
+                    return stored,'conhecimento validado pelo utilizador e guardado'
+                return self._research_public(topic,message.strip())
             intent=interpret(message,self.last_question,self.awaiting_explanation)
             if (intent.kind in ('question','definition_question','explanation')
                     and self.memory.resolve_intent_alias(message)=='self_knowledge'):
@@ -279,17 +355,7 @@ class Brain:
                     else:self.memory.event('reasoning',proof.method,float(len(proof.steps)))
                     return proof.answer, 'raciocínio verificável (simbólico, não neuronal)' if proof.method!='incomplete' else 'informação insuficiente'
             if intent.kind=='search':
-                if os.getenv('NORD_INTERNET','on').lower() in ('off','0','false','no'):
-                    return 'A pesquisa oficial está desligada (NORD_INTERNET=off).','ferramenta indisponível'
-                results=search(intent.topic)
-                if not results:
-                    return ('Ainda não tenho uma fonte primária aprovada para esse tema. '
-                            'Posso pesquisar apenas documentação oficial selecionada.'), 'sem fonte aprovada'
-                n=self.absorb_official_sources(intent.topic,results)
-                item=results[0]
-                return (f"Fonte oficial sobre {intent.topic}: {item['summary'][:240]}\nFonte: {item['url']}\n"
-                        f'Exemplos de fonte treinados agora: {n}. '
-                        'A origem é identificada; a afirmação não foi confirmada por fontes independentes.'), 'documentação de fonte primária'
+                return self._research_public(intent.topic,message.strip())
             if intent.kind=='definition_question':
                 self.last_question=f'O que é {intent.topic}?'
                 known=self.memory.lookup_concept(intent.topic)
@@ -312,6 +378,13 @@ class Brain:
             if source=='sem treino suficiente':
                 self.awaiting_explanation=True
                 self.memory.unknown(intent.question[:90])
+            elif source=='rede neuronal experimental, não verificada':
+                # This tiny, non-pretrained LM cannot be trusted for arbitrary
+                # factual text. Its raw output remains accessible in diagnostics.
+                self.awaiting_explanation=True
+                self.memory.unknown(intent.question[:90])
+                return ('Ainda não sei responder com confiança. Podes ensinar-me, '
+                        'ou pedir que pesquise fontes públicas?'), 'sem resposta factual verificada'
             return reply,source
 
     def simulate_cognition(self, domain: str = 'tudo', examples: int = 1):

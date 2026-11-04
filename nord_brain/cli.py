@@ -14,7 +14,7 @@ HELP='''Fala normalmente comigo. Exemplos:
   Quando eu perguntar como te chamas?, responde Nord Brain.
   Não, a resposta correta é outra.
   O que aprendeste?
-  Pesquisa sobre Python. (documentação oficial, Internet ativa por defeito)
+  Quem é Elon Musk? / Pesquisa sobre um tema. (fontes públicas; não são verdades confirmadas)\n  Confirma fonte 1. (aprendizagem neuronal após a tua validação)
   2+2 é 4. (gera hipóteses matemáticas e treina autonomamente)
   Simula 3 cenários.  (testa 4 ações e aprende com as consequências)
   Experimenta tudo.  (matemática, padrões, lógica, linguagem e mundo virtual)
@@ -69,7 +69,7 @@ def main(argv=None):
     parser.add_argument('--data',type=Path,default=Path(os.environ.get('NORD_DATA',str(Path.home()/'.nord-brain'))))
     args=parser.parse_args(argv)
     brain=Brain(args.data)
-    print('Nord Brain v1.1 | Transformer próprio | aprendizagem autónoma experimental')
+    print('Nord Brain v1.2 | Transformer próprio | aprendizagem autónoma experimental')
     print('Fala normalmente. Escreve /ajuda para exemplos ou /sair para terminar.')
     try:
         while True:

@@ -1,3 +1,51 @@
+# Nord Brain V1.2 — pesquisa pública com fontes e aprendizagem textual controlada
+
+A Nord Brain mantém o Transformer experimental próprio, a matemática verificável e o laboratório de hipóteses da V1.1. **O modelo de texto continua sem pré-treino equivalente ao Qwen**, por isso é perigoso tratar palavras aleatórias como respostas. A V1.2 passa a distinguir perguntas públicas de texto ensinável e a apresentar fontes quando não tem conhecimento fundamentado.
+
+## Resolver as perguntas do terminal
+
+```text
+tu> e 3+5
+nord> O resultado é 8. 3 + 5 = 8
+
+tu> quem é Elon Musk?
+nord> Encontrei estas informações sobre Elon Musk (ainda não confirmadas):
+      [1] [Título e excerto devolvidos pelo motor de pesquisa]
+          Fonte: https://... (endereço real)
+
+ tu> confirma fonte 1
+nord> Confirmação registada. Atualizei os pesos com a informação que validaste...
+
+tu> experimenta linguagem 2
+nord> Laboratório de experiências textuais com as definições aprovadas.
+```
+
+Não há um resumo fixo sobre Elon Musk no código. A resposta depende de **resultados reais** e mostra os links. Caso não encontre fontes, diz que não sabe em vez de inventar `3` ou `t`. Confirmar um resultado atualiza os pesos PyTorch (passo de gradiente), mas **isso não garante que a rede consiga generalizar noutras frases**. O laboratório de linguagem pode criar perguntas novas a partir das definições validadas e comparar previsão/resultado com questões separadas para avaliação.
+
+## Pesquisa pública além de quatro sites
+
+- Para documentação de Python, Raspberry Pi, NASA e kernel Linux, mantém fontes primárias fixas previamente autorizadas; esses resumos curtos podem continuar a treinar automaticamente quando `NORD_SOURCE_TRAIN=on` (comportamento anterior).
+- Para assuntos gerais, pessoas e outros temas: usa a API Brave Search com chave opcional `NORD_BRAVE_API_KEY`, se configurada. Sem chave tenta os resultados HTML sem JavaScript do DuckDuckGo. Esta segunda via **não é uma API suportada** e pode bloquear pedidos ou deixar de funcionar, por isso não há garantia de disponibilidade.
+- Os resultados públicos são considerados **excertos não verificados**; não são treino automático. O utilizador escolhe `confirma fonte N` antes de os tratar como exemplos ensinados. Para corrigir, pode explicar diretamente um facto ou rejeitar uma hipótese.
+- É mostrada a URL de cada fonte. Wikipedia/Wikimedia permanecem excluídos segundo a preferência do projeto. Páginas externas não são executadas nem abertas para leitura livre: só se usam os excertos fornecidos pelo motor de pesquisa. O motor de pesquisa recebe o tema público, não o histórico da conversa.
+- Pesquisa requer acesso HTTPS de saída na VM. A existência de uma fonte não significa que a afirmação esteja correta, nem que a Nord Brain tenha aprendido a linguagem naturalmente.
+
+```bash
+# atualiza e arranca
+cd ~/nord_ai_platform && git pull origin main && bash install.sh
+
+# opcional: definir chave do serviço de pesquisa na shell (não a guardes no git)
+export NORD_BRAVE_API_KEY='A_TUA_CHAVE'
+./nord
+
+# modo sem Internet
+NORD_INTERNET=off ./nord
+```
+
+Para verificar o próprio cérebro sem a ajuda do verificador matemático, consulta os resultados neuronais de `/avaliar`, `/cerebro` e `NORD_SHOW_ORIGIN=on ./nord`. A aprendizagem e as simulações em CPU funcionam enquanto a aplicação está aberta.
+
+---
+
 # Nord Brain V1.1 — teorias de causa e efeito e controlo do professor
 
 Agora, depois de uma demonstração verificada como `2+2 é 4`, a Nord Brain gera **hipóteses contrafactuais**: mudar o primeiro ou segundo valor em +1/-1, transferir 1 entre eles, trocar a operação, duplicar ambos e experimentar novos valores. Por exemplo, `3+2=5`, `1+2=3`, `3+1=4`, `3+3=6` e `4+4=8`. Cada hipótese tem a explicação da transformação, é prevista pelo Transformer antes de se conhecer o resultado, verificada independentemente por matemática determinística e só depois pode atualizar os pesos. O verificador não é o Transformer; uma resposta correta do verificador **não prova generalização neuronal**.
@@ -29,7 +77,7 @@ tu> retoma aprendizagem
 nord> Reativei as experiências e o treino autónomo.
 ```
 
-O modo de revisão de hipóteses matemáticas é **opcional**; por defeito, as hipóteses aritméticas verificadas treinam autonomamente. Ao ativá-lo, também são suspensos o currículo automático de contas, o treino automático de padrões numéricos e a revisão dos exemplos matemáticos automáticos anteriores; só hipóteses que aprovares podem avançar pelo laboratório de hipóteses. A pausa aplica-se a todas as atualizações autónomas, incluindo o simulador de movimento e a investigação. As instruções explícitas do professor continuam a poder ensinar mesmo com a autonomia pausada. O modo de revisão não bloqueia automaticamente lógica, linguagem nem simulações do mundo virtual; usa `pausa aprendizagem` para parar todo esse treino.
+O modo de revisão de hipóteses matemáticas é **opcional**; por defeito, as hipóteses aritméticas verificadas treinam autonomamente. A pausa aplica-se a todas as atualizações autónomas, incluindo o simulador de movimento e a investigação. As instruções explícitas do professor continuam a poder ensinar mesmo com a autonomia pausada. O modo de revisão não bloqueia automaticamente o currículo autónomo de outras áreas; usa `pausa aprendizagem` para parar todo esse treino.
 
 Se disseres `3+2 é 8`, a conta é recusada pelo verificador; `3+2 é 5` é aceite. **Rejeitar uma hipótese depois de já ter sido treinada bloqueia experiências futuras, mas não desfaz os pesos anteriormente modificados.** A fila, as decisões do professor e os bloqueios sobrevivem ao reinício da aplicação.
 
