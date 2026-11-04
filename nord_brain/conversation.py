@@ -145,6 +145,50 @@ def self_query_kind(message: str) -> str | None:
             or re.match(r'^(?:como|onde|quando|por que|porque)\s+te\b', q)
             or re.match(r'^(?:tens|sentes|gostas|preferes|acreditas|conheces)\s+[a-z]', q)):
         return 'unknown'
+    # Conversational second-person references. These variants all describe
+    # the *current running Nord Brain*; they are not teacher answer strings.
+    # Keep questions about other subjects outside the self router.
+    if q.startswith(('quando ', 'ensina ', 'aprende ', 'lembra te ')):
+        return None
+    if re.match(r'^(?:e\s+)?(?:isso\s+)?(?:e\s+)?(?:o\s+)?(?:mesmo|igual|equivalente)\s+(?:que|a)?\s*(?:te\s+)?(?:dizer|disser|perguntar|digo|pergunto)\s+o\s+que\s+(?:tu\s+)?sabes',q):
+        return 'summary'
+    if re.search(r'\b(?:tu\s+)?sabes\s+(?:quem|onde|o que|quando|como)\s+',q):
+        return None
+    if re.search(r'\b(?:o que|quanto|que)\s+(?:tu\s+)?(?:sabes|conheces)\s+(?:sobre|acerca|de)\s+',q):
+        if not re.search(r'\b(?:sobre\s+(?:ti|a\s+tua|o\s+teu|a\s+nord)|de\s+ti)\b',q):
+            return None
+    addresses_me=bool(re.search(
+        r'\b(?:tu|te|teu|tua|teus|tuas|voce|contigo|ti|nord brain|a ia|'
+        r'sabes|aprendeste|aprendes|consegues|podes|es|tens|funcionas|estas|'
+        r'lembras|simulas|pesquisas)\b',q))
+    if not addresses_me:
+        return None
+    if re.search(r'\b(?:o que|quais|diz|mostra)\b',q) and re.search(
+        r'\b(?:sabes|conheces|fazes|fazer|consegues|capacidades|competencias|habilidades)\b',q):
+        return 'summary'
+    if re.search(r'\b(?:nome|chamas|quem es|quem tu es|es uma ia|es a nord brain)\b',q):
+        return 'identity'
+    if re.search(r'\b(?:memoria|lembras|recordas|guardas|armazenas)\b',q):
+        return 'memory'
+    if re.search(r'\b(?:internet|web|pesquisas|pesquisar|fontes)\b',q):
+        return 'internet'
+    if re.search(r'\b(?:simulas|simulacoes|hipoteses|cenarios|experiencias)\b',q):
+        return 'experiments'
+    if re.search(r'\b(?:como aprendes|aprendeste|treino|treinar|evoluir)\b',q):
+        return 'training'
+    if re.search(r'\b(?:cerebro|transformer|modelo|arquitetura|como funcionas)\b',q):
+        return 'architecture'
+    if re.search(r'\b(?:nao sabes|nao consegues|limitacoes|limites|dificuldades)\b',q):
+        return 'limitations'
+    if re.search(r'\b(?:onde estas|onde vives|localizacao)\b',q):
+        return 'location'
+    if re.search(r'\b(?:sentimentos|emocoes|consciencia|es consciente|sentes)\b',q):
+        return 'experience'
+    # Do not turn a mathematical question into a self-reflection question.
+    if re.search(r'\d\s*[+*/-]\s*\d',q):
+        return None
+    if re.search(r'\b(?:o que|quem|como|porque|qual|quais|onde|podes|sabes|tens|es|gostas|sentes)\b',q):
+        return 'unknown'
     return None
 
 def _means_self_knowledge(description: str) -> bool:

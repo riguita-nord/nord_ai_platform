@@ -103,6 +103,28 @@ class Memory:
             question TEXT PRIMARY KEY, reason TEXT NOT NULL, created INTEGER NOT NULL
         );
         """)
+        # Older dialogue versions accidentally trained on paraphrases as
+        # literal answers. Preserve those rows, but exclude them from replay
+        # and exact-match answers, instead of deleting the user's memory.
+        from .conversation import self_query_kind, normalize_request
+        candidate_rows=self.db.execute(
+            "SELECT id,question,answer FROM lessons WHERE origin='teacher'"
+        ).fetchall()
+        misparsed=[]
+        for item_id,question,answer in candidate_rows:
+            if not self_query_kind(question):
+                continue
+            normal=normalize_request(answer)
+            if (self_query_kind(answer) or
+                    (normal.startswith('quando ') and 'quero que' in normal) or
+                    ('mesmo que te disser' in normal)):
+                misparsed.append((item_id,))
+        if misparsed:
+            with self.db:
+                self.db.executemany(
+                    "UPDATE lessons SET origin='legacy_self_paraphrase' WHERE id=?",
+                    misparsed,
+                )
         self.db.commit()
 
     def training_paused(self):
