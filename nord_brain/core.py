@@ -256,6 +256,69 @@ class NeuralCore:
         self.model.eval()
         return loss_value
 
+    @staticmethod
+    def _text_windows(text: str, context: int):
+        """Supervised next-byte language modelling on a HUMAN-APPROVED corpus.
+
+        Unlike question/answer training, all source bytes are next-token
+        targets. Windows overlap for context, but each target is trained on
+        once in the complete iteration. No automatic web/self-output labels.
+        """
+        clean=text.replace('\x00','').strip()
+        if not clean or len(clean.encode('utf-8'))>100000:
+            raise ValueError('O texto tem de conter entre 1 e 100000 bytes')
+        full=[BOS]+list(clean.encode('utf-8'))+[EOS]
+        stride=max(12,context//3)
+        windows=[]
+        for first in range(1,len(full),stride):
+            end=min(len(full),first+stride)
+            left=max(0,end-context)
+            left=min(left,first-1)
+            tokens=torch.tensor(full[left:end-1],dtype=torch.long).unsqueeze(0)
+            labels=torch.tensor(full[left+1:end],dtype=torch.long).unsqueeze(0)
+            labels[0,:max(0,first-left-1)]=-100
+            windows.append((tokens,labels))
+        return windows
+
+    def train_text(self, text: str, *, updates: int=6, rate: float=.00012) -> float:
+        """Update own Transformer weights from explicitly approved Portuguese.
+
+        Sparse, deterministic sampling across the whole document prevents the
+        first paragraph from monopolising short CPU training sessions.
+        Caller owns checkpoint validation and persistence/rollback.
+        """
+        if not 1<=updates<=32 or not 0<rate<=.001:
+            raise ValueError('Treino de texto: 1–32 atualizações e taxa segura')
+        windows=self._text_windows(text,self.model.config.context)
+        count=min(updates,len(windows))
+        if count<1:
+            raise ValueError('Texto vazio')
+        # Rotate through different positions across later runs, with no RNG
+        # dependency or hidden global state.
+        offset=self.steps%len(windows)
+        positions=[(offset+(i*len(windows))//count)%len(windows) for i in range(count)]
+        self.model.train()
+        for group in self.optimizer.param_groups:
+            group['lr']=rate
+        losses=[]
+        try:
+            for pos in positions:
+                tokens,labels=windows[pos]
+                self.optimizer.zero_grad(set_to_none=True)
+                logits=self.model(tokens)
+                loss=F.cross_entropy(logits.reshape(-1,VOCAB_SIZE),
+                                     labels.reshape(-1),ignore_index=-100)
+                if not torch.isfinite(loss):
+                    raise FloatingPointError('Erro numérico no treino textual')
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(),1.)
+                self.optimizer.step()
+                self.steps+=1
+                losses.append(float(loss.detach()))
+        finally:
+            self.model.eval()
+        return sum(losses)/len(losses)
+
     @torch.inference_mode()
     def score(self, examples: list[tuple[str, str]]) -> float:
         """Mean answer-token cross-entropy on evaluation examples, never trains."""

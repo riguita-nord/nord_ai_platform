@@ -291,7 +291,8 @@ class GeneralContextRegression(unittest.TestCase):
                 b=self.make_brain(root)
                 b.chat('4+4')
                 b.close()
-            b=self.make_brain(root)
+            with patch.dict('os.environ',{'NORD_LANGUAGE_BACKEND':'external'}):
+                b=self.make_brain(root)
             try:
                 opener=Opener()
                 with patch.dict('os.environ',{'NORD_LLM':'on'}),patch(

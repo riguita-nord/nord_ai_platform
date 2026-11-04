@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 from pathlib import Path
 from .runtime import Brain
 
@@ -29,6 +30,8 @@ HELP='''Fala normalmente comigo. Exemplos:
 
 Comandos técnicos opcionais: /cerebro, /avaliar, /ajuda, /sair
   /treinar-portugues 20    (treino REAL nos pesos, CPU, com avaliação separada)
+  /treinar-texto <ficheiro.txt> [6]  (treino de texto corrido que TU aprovas)
+  /gerar-neural <tema>    (ver saída direta do teu Transformer, sem verificadores)
   /avaliar-portugues      (perda em frases não usadas no currículo)
   /diagnostico-pesquisa   (testar pesquisa na Internet e fornecedores)
   /livro novo <tema>        (começa um romance de 10 capítulos)
@@ -39,7 +42,7 @@ Comandos técnicos opcionais: /cerebro, /avaliar, /ajuda, /sair
   /livro selecionar <id>  (retomar um livro anterior)
   /livro ler <n>          (reler um capítulo)
   /livro exportar         (exporta Markdown para a pasta local)
-  /diagnostico-linguagem  (verificar modelo linguístico local)
+  /diagnostico-linguagem  (mostrar o Transformer Nord e os passos de treino)
   /contexto             (ver o último assunto guardado)
   /limpar-contexto       (apagar apenas o histórico de conversa)
 A aprendizagem, a revisão e a decisão experimental de crescimento funcionam
@@ -78,6 +81,21 @@ def handle(brain,line):
         if len(parts)>2:raise ValueError('Usa /treinar-portugues ou /treinar-portugues 20')
         amount=int(parts[1]) if len(parts)==2 else 20
         return describe(train(brain,amount))
+    if line.startswith('/treinar-texto'):
+        from .native_training import train_approved_file, describe
+        args=shlex.split(line)
+        if len(args) not in (2,3):
+            raise ValueError('Usa /treinar-texto caminho/ficheiro.txt [1-32]')
+        updates=int(args[2]) if len(args)==3 else 6
+        return describe(train_approved_file(brain,args[1],updates=updates))
+    if line.startswith('/gerar-neural'):
+        prompt=line.removeprefix('/gerar-neural').strip()
+        if not prompt:
+            raise ValueError('Usa /gerar-neural <pergunta ou tema>')
+        with brain.lock:
+            output=brain.core.generate(prompt,max_bytes=125,temperature=.7)
+        return ('Saída BRUTA dos pesos Nord (não verificada): '
+                +(output or '[sem saída; ainda não sabe gerar texto útil]'))
     if line=='/avaliar-portugues':
         from .portuguese_training import evaluate
         result=evaluate(brain)
@@ -89,7 +107,8 @@ def handle(brain,line):
         term=line.removeprefix('/diagnostico-pesquisa').strip() or 'Elon Musk'
         return search_diagnostic(term)
     if line=='/diagnostico-linguagem':
-        return 'Modelo de linguagem: '+brain.language.status()+'. O treino do Transformer Nord é separado.'
+        return (brain.language.status()+'. Passos de treino nos pesos Nord: '
+                +str(brain.core.steps)+'. Pode usar /gerar-neural para testar geração direta.')
     if line.startswith('/livro'):
         from .story_studio import BookCommand
         args=line[len('/livro'):].strip().split()
@@ -140,7 +159,7 @@ def main(argv=None):
     parser.add_argument('--data',type=Path,default=Path(os.environ.get('NORD_DATA',str(Path.home()/'.nord-brain'))))
     args=parser.parse_args(argv)
     brain=Brain(args.data)
-    print('Nord Brain v1.9 | contexto contínuo + livros por capítulos + linguagem local opcional')
+    print('Nord Brain v2.0 | Transformer próprio + treino textual CPU + memória de conversa')
     print('Fala normalmente. Escreve /ajuda para exemplos ou /sair para terminar.')
     try:
         while True:

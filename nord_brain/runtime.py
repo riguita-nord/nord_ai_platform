@@ -24,7 +24,8 @@ from .world import WorldMind
 from .theory_control import route_control
 from .cognition import CognitiveLab
 from .creative import creative_request, story
-from .language_backend import LocalLanguage
+from .language_backend import LocalLanguage  # legacy, explicit opt-in only
+from .native_language import NativeLanguage
 from .story_studio import StoryStudio, BookCommand, parse_book_command
 from .dialogue import DialogueMemory, followup_kind
 from .story_revision import revise_story
@@ -51,7 +52,11 @@ class Brain:
         # Its weights are trained from transitions, never injected via chat context.
         self.world=WorldMind(self.data_dir/'world-model-v1.pt')
         self.cognition=CognitiveLab(self)
-        self.language=LocalLanguage()
+        # The Nord Transformer is the primary language engine. An independent
+        # pretrained model is never started by default; the legacy adapter
+        # requires an explicit developer opt-in.
+        self.language=(LocalLanguage() if os.getenv('NORD_LANGUAGE_BACKEND','native').strip().lower()=='external'
+                       else NativeLanguage(self))
         self.stories=StoryStudio(self.data_dir)
         self.dialogue=DialogueMemory(self.data_dir)
         # Every reply, including symbolic reasoning and web research, now
@@ -340,7 +345,7 @@ class Brain:
             output=self.language.generate(prompt,creative=True,max_tokens=1200,
                                           remember=False)
             if output and len(output.strip())>=len(original)*0.65:
-                return output,'ficção contextual revista pelo modelo local'
+                return output,'ficção contextual revista pelo Transformer Nord (experimental)'
             # The offline generator can add development/dialogue, but cannot
             # promise arbitrary transformations of tone, register or style.
             from .dialogue import normalize
@@ -351,9 +356,9 @@ class Brain:
                        'ficção contextual procedural (expansão limitada)'
             return ('Continuamos na mesma história. Percebi a alteração: «'
                     +message[:180]+'». Não consigo reescrever livremente o estilo '
-                    'com o modelo local desligado. Podes pedir uma versão mais '
+                    'quando a geração neuronal ainda não estiver fluente. Podes pedir uma versão mais '
                     'longa, capítulos ou continuação, que consigo fazer offline.'), \
-                   'continuidade contextual sem modelo linguístico'
+                   'continuidade contextual com recursos neuronais ainda insuficientes'
         if kind == 'reference' and focus in ('story','book'):
             original = previous['reply']
             if focus == 'book':
@@ -366,7 +371,7 @@ class Brain:
             result = self.language.generate(prompt, creative=False, max_tokens=240,
                                             remember=False)
             if result:
-                return result,'continuidade contextual com modelo linguístico local'
+                return result,'continuidade contextual com Transformer Nord (experimental)'
             from .story_revision import _elements
             name, where, discovery = _elements(original)
             from .dialogue import normalize
@@ -411,7 +416,7 @@ class Brain:
                                and len(output.strip()) < len(source_story)*1.25)):
                 output = revise_story(source_story,kind)
                 return output, 'ficção contextual procedural (sem modelo pré-treinado)'
-            return output, 'ficção contextual gerada pelo modelo linguístico local'
+            return output, 'ficção contextual gerada pelo Transformer Nord (experimental)'
         if kind in ('explain','discuss','reference','shorter','longer','rewrite','continue','refine','chapters'):
             prompt = (
                 'Continua a conversa em português europeu. Usa o histórico recente '
@@ -422,14 +427,14 @@ class Brain:
                 'Pedido atual: ' + message[:300])
             output = self.language.generate(prompt,creative=False,max_tokens=430)
             if output:
-                return output,'continuidade contextual com modelo linguístico local'
+                return output,'continuidade contextual com Transformer Nord (experimental)'
             # Avoid claiming the scratch-trained Transformer understands a
             # reference to material it has not learned to paraphrase.
             return ('Estávamos a falar de «'+(previous.get('topic') or previous['question'])[:140]+'». '
                     'A minha resposta anterior foi: '+previous['reply'][:420]
                     +'\nPosso aprofundar com o modelo linguístico local ativo; '
-                    'sem ele, não consigo garantir uma explicação nova.'), \
-                   'continuidade contextual sem modelo linguístico'
+                    'ainda não consigo garantir uma explicação nova.'), \
+                   'continuidade contextual com recursos neuronais ainda insuficientes'
         return None
 
     def _chat_impl(self,message: str) -> tuple[str,str]:
@@ -456,7 +461,7 @@ class Brain:
                 self.last_question=None
                 response=self.language.generate(message,creative=True,max_tokens=650)
                 if response:
-                    return response,'linguagem pré-treinada local (llama.cpp); não é treino Nord'
+                    return response,'geração neuronal local (Transformer Nord, experimental)'
                 return story(creative_topic),'composição narrativa procedural (sem modelo pré-treinado)'
             # First-person questions concern the actual running agent, not
             # numbers, web research, or another teacher answer.
@@ -537,7 +542,7 @@ class Brain:
                 self.awaiting_explanation=False
                 self.last_question=None
                 response=self.language.generate(message,creative=True,max_tokens=80)
-                if response:return response,'linguagem pré-treinada local (llama.cpp)'
+                if response:return response,'geração neuronal local (Transformer Nord, experimental)'
                 # Offline variation is interface behaviour, NOT evidence of
                 # fluency or spontaneous neural comprehension.
                 greetings=('Olá! Como estás hoje?',
@@ -620,7 +625,7 @@ class Brain:
             llm_response=self.language.generate(message,max_tokens=320)
             if llm_response:
                 self.last_question=None
-                return llm_response,'linguagem pré-treinada local (llama.cpp); não é treino Nord'
+                return llm_response,'geração neuronal local (Transformer Nord, experimental)'
             reply,source=self.answer(intent.question)
             if source=='sem treino suficiente':
                 self.awaiting_explanation=True

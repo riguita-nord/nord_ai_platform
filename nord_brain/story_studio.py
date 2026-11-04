@@ -302,7 +302,7 @@ class StoryStudio:
             tokens=min(1050,max(200,tokens))
             output=language.generate(prompt,creative=True,max_tokens=tokens,remember=False) if language else None
             if output is not None and len(output.strip())<180:output=None
-            source='modelo linguístico local' if output else 'gerador procedural sem modelo linguístico'
+            source='Transformer Nord nativo (experimental)' if output else 'gerador procedural sem fluência neuronal'
             body=output.strip() if output else self._offline_chapter(book,number,chapter_title,beat)
             recap=(f'{chapter_title}: {beat} '
                    f'Início: {body[:170].strip()} Final: {body[-240:].strip()}')[:550]

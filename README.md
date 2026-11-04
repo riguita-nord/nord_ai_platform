@@ -1,3 +1,65 @@
+# Nord Brain V2.0 — Transformer próprio, sem segundo modelo
+
+**O cérebro que responde é o Nord Transformer treinado pela própria Nord Brain.**
+Por defeito, a aplicação **não usa Qwen, llama.cpp, APIs externas de IA nem
+downloads de modelos**. A janela de memória da conversa, a lógica verificada e
+os mundos simulados continuam a integrar o mesmo cérebro.
+
+## Começar
+
+```bash
+git pull origin main
+./nord
+```
+
+`/diagnostico-linguagem` mostra o estado do gerador nativo.
+`/gerar-neural conta-me uma história` mostra texto bruto criado diretamente
+pelos pesos, mesmo que ainda não seja português correto.
+
+## Ensinar linguagem real aos pesos
+
+O treino anterior usava sobretudo exemplos curtos de pergunta/resposta. A
+versão V2.0 adiciona **modelação causal de texto corrido**: o Transformer tenta
+prever os bytes seguintes de narrativas, diálogos e parágrafos previamente
+**aprovados por ti**. Cada sessão treina no máximo 32 pequenas janelas em CPU.
+
+1. Escreve ou escolhe um ficheiro UTF-8 `.txt` ou `.md` (entre 180 B e 100 KB).
+2. Na Nord Brain, escreve:
+
+```text
+/treinar-texto ~/portugues/historias.txt 6
+/gerar-neural conta-me uma história
+/avaliar-portugues
+```
+
+O sistema guarda os pesos e o otimizador, regista o hash do documento e
+**reverte a sessão** se os testes de lições do professor ou de exemplos
+reservados sofrerem uma regressão acima dos limites. Não treina
+automaticamente sobre informação da Internet nem sobre as próprias histórias
+geradas. Os dados de treino não substituem os factos que lhe ensinaste.
+
+Para depuração, `NORD_NATIVE_MIN_STEPS=80` define o mínimo de atualizações
+antes de experimentar geração neuronal num diálogo normal; o comando
+`/gerar-neural` continua a mostrar a saída bruta.
+`NORD_NATIVE_GENERATION=off` desativa a geração nativa sem desligar
+a memória nem os verificadores. A integração histórica com um modelo
+pré-treinado só é acessível se o operador selecionar **explicitamente**
+`NORD_LANGUAGE_BACKEND=external`; não faz parte do percurso normal.
+
+## Limitação real
+
+O modelo nativo tem pesos próprios, mas um Transformer muito pequeno,
+inicializado do zero, **não fica fluente só por receber um novo motor de
+contexto**. A versão V2.0 melhora as vias de treino e permite experimentar
+a geração autónoma sem outro modelo. Quando a geração não atinge critérios
+mínimos de qualidade, a Nord Brain mantém os módulos verificados ou a
+composição procedural já existentes. Esses textos não são apresentados como
+prova de criatividade neuronal. Para aproximar a escrita de um modelo
+avançado, será necessário um corpus português muito maior, treino prolongado
+e avaliação independente em conversas e histórias nunca vistas.
+
+---
+
 # Nord Brain V1.9 — instruções incompletas e continuidade real
 
 Quando um pedido curto acrescenta algo ao que acabou de ser dito — por exemplo,
