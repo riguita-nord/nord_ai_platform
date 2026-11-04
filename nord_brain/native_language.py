@@ -79,10 +79,9 @@ class NativeLanguage:
         if os.getenv('NORD_NATIVE_GENERATION','on').strip().lower() in (
                 '0','false','off','no'):
             return None
-        # Respect the legacy off switch for installations/tests that explicitly
-        # requested deterministic, zero-token-generation operation.
-        if os.getenv('NORD_LLM','').strip().lower() in ('off','0','false','no'):
-            return None
+        # NORD_LLM=off disables ONLY the legacy external backend, not
+        # the brain's own Transformer. To disable native generation, use
+        # NORD_NATIVE_GENERATION=off explicitly.
         # A new untrained checkpoint is expected to produce noise. Avoid a
         # slow autoregressive attempt at every question until sufficient
         # actual weight updates exist. This is a budget gate, not a fluency test.

@@ -60,7 +60,7 @@ class NativeLanguageTests(unittest.TestCase):
     def test_explicit_off_disables_generation(self):
         brain=SimpleNamespace(core=SimpleNamespace(
             steps=1000,generate=Mock()))
-        with patch.dict('os.environ',{'NORD_LLM':'off'}):
+        with patch.dict('os.environ',{'NORD_NATIVE_GENERATION':'off'}):
             self.assertIsNone(NativeLanguage(brain).generate('olá'))
         brain.core.generate.assert_not_called()
 
