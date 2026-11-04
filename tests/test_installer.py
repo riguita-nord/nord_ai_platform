@@ -1,4 +1,7 @@
-"""Offline tests for the one-command shell installation and launcher."""
+"""Offline installer tests including Debian/Ubuntu ensurepip recovery.
+
+No package manager calls or downloads occur: all commands are mocked.
+"""
 import os
 from pathlib import Path
 import shutil
@@ -6,60 +9,119 @@ import subprocess
 import tempfile
 import unittest
 
-ROOT = Path(__file__).resolve().parents[1]
-
+ROOT=Path(__file__).resolve().parents[1]
 
 class InstallerTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp=tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
-        shutil.copy(ROOT / 'install.sh', self.root / 'install.sh')
-        shutil.copy(ROOT / 'nord', self.root / 'nord')
-        # Simulate an already-installed environment; never download Torch in tests.
-        venv = self.root / '.venv' / 'bin'
-        venv.mkdir(parents=True)
-        fake_python = venv / 'python'
-        fake_python.write_text('''#!/usr/bin/env bash
+        self.root=Path(self.temp.name)
+        self.mockbin=self.root/'mockbin'
+        self.mockbin.mkdir()
+        shutil.copy(ROOT/'install.sh',self.root/'install.sh')
+        shutil.copy(ROOT/'nord',self.root/'nord')
+        (self.root/'nord').chmod(0o755)
+        self.env=os.environ.copy()
+        self.env['NORD_BRAIN_PRESET']='tiny'
+        self.env['PATH']=str(self.mockbin)+os.pathsep+self.env['PATH']
+        self.env['PYTHON']=str(self.mockbin/'python3')
+        self.env['MOCK_APT_FLAG']=str(self.root/'apt-installed')
+        self.env['MOCK_APT_LOG']=str(self.root/'apt.log')
+        # Fake successful env python, used for all normal installer tests
+        self.fake_venv=self.root/'.venv'/'bin'/'python'
+        self.fake_venv.parent.mkdir(parents=True)
+        self.fake_venv.write_text('''#!/usr/bin/env bash
 if [[ "$1" == "-c" ]]; then exit 0; fi
-if [[ "$1" == "-m" && "$2" == "nord_brain" ]]; then
-  printf 'RUNNING profile=%s args=%s\\n' "$NORD_BRAIN_PRESET" "$*"
-  exit 0
-fi
-printf 'Unexpected Python command: %s\\n' "$*" >&2
+if [[ "$1" == "-m" && "$2" == "pip" && "$3" == "--version" ]]; then exit 0; fi
+if [[ "$1" == "-m" && "$2" == "nord_brain" ]]; then printf 'RUNNING args=%s\\n' "$*"; exit 0; fi
 exit 55
 ''')
-        fake_python.chmod(0o755)
-        self.env = os.environ.copy()
-        self.env['NORD_BRAIN_PRESET'] = 'tiny'
+        self.fake_venv.chmod(0o755)
+        (self.mockbin/'python3').write_text('''#!/usr/bin/env bash
+if [[ "$1" == "-c" ]]; then
+ case "$2" in *version_info*) echo 'python3.12-venv'; exit 0;; *) exit 0;; esac
+fi
+if [[ "$1" == "-m" && "$2" == "venv" ]]; then
+ if [[ -f "$MOCK_APT_FLAG" ]]; then
+  mkdir -p "$4/bin"
+  cp "$(dirname "$0")/working-venv-python" "$4/bin/python"
+  exit 0
+ fi
+ mkdir -p "$4/bin"
+ cp "$(dirname "$0")/broken-venv-python" "$4/bin/python"
+ echo 'The virtual environment was not created successfully because ensurepip is not available.' >&2
+ echo 'apt install python3.12-venv' >&2
+ exit 1
+fi
+exit 50
+''')
+        (self.mockbin/'python3').chmod(0o755)
+        shutil.copy(self.fake_venv,self.mockbin/'working-venv-python')
+        (self.mockbin/'broken-venv-python').write_text('#!/usr/bin/env bash\nexit 1\n')
+        (self.mockbin/'broken-venv-python').chmod(0o755)
+        (self.mockbin/'apt-get').write_text('''#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$MOCK_APT_LOG"
+touch "$MOCK_APT_FLAG"
+''')
+        (self.mockbin/'apt-get').chmod(0o755)
+        (self.mockbin/'sudo').write_text('''#!/usr/bin/env bash
+exec "$@"
+''')
+        (self.mockbin/'sudo').chmod(0o755)
 
-    def run_shell(self, *args):
-        return subprocess.run(['bash', *args], cwd=self.root, env=self.env, text=True, capture_output=True)
+    def call(self,*args):
+        return subprocess.run(['bash',*args],cwd=self.root,env=self.env,capture_output=True,text=True)
 
-    def test_scripts_parse(self):
-        for name in ('install.sh', 'nord'):
-            self.assertEqual(self.run_shell('-n', name).returncode, 0)
+    def test_bash_syntax(self):
+        for name in ('install.sh','nord'):
+            self.assertEqual(self.call('-n',name).returncode,0)
 
-    def test_one_command_installs_and_starts(self):
-        p = self.run_shell('install.sh')
-        self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertIn('RUNNING profile=tiny', p.stdout)
+    def test_existing_venv_starts_directly(self):
+        r=self.call('install.sh')
+        self.assertEqual(r.returncode,0,r.stderr)
+        self.assertIn('RUNNING',r.stdout)
+        self.assertFalse((self.root/'apt.log').exists())
 
-    def test_install_only_does_not_start(self):
-        p = self.run_shell('install.sh', '--install-only')
-        self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertNotIn('RUNNING', p.stdout)
+    def test_install_only(self):
+        r=self.call('install.sh','--install-only')
+        self.assertEqual(r.returncode,0,r.stderr)
+        self.assertNotIn('RUNNING',r.stdout)
 
-    def test_launcher_passes_cli_arguments(self):
-        p = self.run_shell('nord', '--data', './dados')
-        self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertIn('args=-m nord_brain --data ./dados', p.stdout)
+    def test_launcher_passes_data(self):
+        r=self.call('nord','--data','./dados')
+        self.assertEqual(r.returncode,0,r.stderr)
+        self.assertIn('--data ./dados',r.stdout)
 
-    def test_help_without_installation(self):
-        p = self.run_shell('install.sh', '--help')
-        self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertIn('bash install.sh', p.stdout)
+    def test_help(self):
+        self.fake_venv.unlink()
+        r=self.call('install.sh','--help')
+        self.assertEqual(r.returncode,0,r.stderr)
+        self.assertIn('bash install.sh',r.stdout)
 
+    def test_partial_venv_ensurepip_failure_installs_package_and_recovers(self):
+        self.fake_venv.write_text('#!/usr/bin/env bash\nexit 1\n')
+        self.fake_venv.chmod(0o755)
+        r=self.call('install.sh')
+        self.assertEqual(r.returncode,0,r.stdout+'\n'+r.stderr)
+        self.assertIn('ensurepip',r.stdout+r.stderr)
+        self.assertIn('RUNNING',r.stdout)
+        self.assertIn('python3.12-venv',(self.root/'apt.log').read_text())
+        self.assertTrue(self.fake_venv.exists())
 
-if __name__ == '__main__':
-    unittest.main()
+    def test_launcher_recovers_partial_environment(self):
+        self.fake_venv.write_text('#!/usr/bin/env bash\nexit 1\n')
+        self.fake_venv.chmod(0o755)
+        r=self.call('nord')
+        self.assertEqual(r.returncode,0,r.stderr)
+        self.assertIn('RUNNING',r.stdout)
+        self.assertIn('python3.12-venv',(self.root/'apt.log').read_text())
+
+    def test_failed_venv_creation_does_not_touch_brain_data(self):
+        self.fake_venv.unlink()
+        data=self.root/'memory.sqlite3'
+        data.write_text('KEEP')
+        r=self.call('install.sh','--install-only')
+        self.assertEqual(r.returncode,0,r.stderr)
+        self.assertEqual(data.read_text(),'KEEP')
+
+if __name__=='__main__':unittest.main()

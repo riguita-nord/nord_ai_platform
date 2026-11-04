@@ -1,3 +1,15 @@
+### Correção automática de `ensurepip` / `python3.12-venv`
+
+Em Ubuntu/Debian, se faltar `python3.X-venv`, o instalador deteta o erro `ensurepip`, tenta instalar automaticamente o pacote da mesma versão do Python com `sudo apt-get`, recria o ambiente virtual incompleto e continua a instalação. Poderá pedir a palavra-passe de `sudo`. Se o APT falhar, mostra o comando manual para recuperação. O instalador **não apaga os pesos nem a memória da Nord Brain**.
+
+Depois de atualizar o repositório, executa:
+
+```bash
+cd ~/nord_ai_platform
+git pull origin main
+bash install.sh
+```
+
 # Nord Brain V0.4 — raciocínio verificável, aprendizagem autónoma e conversa pelo terminal
 
 **Projeto experimental, sem pesos pré-treinados.** O cérebro é um Transformer próprio em PyTorch (atenção causal/GQA, RoPE, RMSNorm e SwiGLU) e **não usa o Qwen nem Ollama**. A arquitetura está preparada para aprender pesos, guardar experiências e experimentar expansão neuronal. **Não é equivalente a um LLM treinado; não compreende português fluentemente e não existe garantia de inteligência geral.**
@@ -51,7 +63,7 @@ Se ainda não tens o projeto descarregado (Linux/Ubuntu), cola esta **linha úni
 git clone https://github.com/riguita-nord/nord_ai_platform.git && cd nord_ai_platform && bash install.sh
 ```
 
-O instalador cria o ambiente virtual, instala PyTorch e abre imediatamente a conversa da Nord Brain. A primeira instalação requer **git, Python 3.10+, python3-venv e Internet** para descarregar dependências. Não usa sudo, não configura serviços systemd e não abre portas de rede.
+O instalador cria o ambiente virtual, instala PyTorch e abre imediatamente a conversa da Nord Brain. A primeira instalação requer **git, Python 3.10+, python3-venv e Internet** para descarregar dependências. Pode solicitar sudo somente para instalar o pacote Python venv em falta; não configura serviços systemd nem abre portas de rede.
 
 Se já tens o projeto, atualiza e inicia diretamente com:
 
