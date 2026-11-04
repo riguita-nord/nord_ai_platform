@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Fast launcher: never reinstalls dependencies unless .venv is missing.
+set -Eeuo pipefail
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT"
+
+if [[ ! -x "$ROOT/.venv/bin/python" ]]; then
+  bash "$ROOT/install.sh" --install-only
+fi
+
+if [[ -z "${NORD_BRAIN_PRESET:-}" ]]; then
+  # A conservative default for small Linux VMs; the saved checkpoint always
+  # determines the actual architecture for an existing brain.
+  if [[ -r /proc/meminfo ]]; then
+    MEM_KB="$(awk '/^MemTotal:/ {print $2; exit}' /proc/meminfo)"
+    # Account for Linux containers with a smaller cgroup memory limit.
+    if [[ -r /sys/fs/cgroup/memory.max ]]; then
+      LIMIT_BYTES="$(cat /sys/fs/cgroup/memory.max)"
+      if [[ "$LIMIT_BYTES" =~ ^[0-9]+$ ]]; then
+        LIMIT_KB=$((LIMIT_BYTES / 1024))
+        if [[ "$MEM_KB" =~ ^[0-9]+$ ]] && (( LIMIT_KB < MEM_KB )); then
+          MEM_KB="$LIMIT_KB"
+        fi
+      fi
+    fi
+    if [[ "$MEM_KB" =~ ^[0-9]+$ ]] && (( MEM_KB <= 3145728 )); then
+      export NORD_BRAIN_PRESET=tiny
+    else
+      export NORD_BRAIN_PRESET=small
+    fi
+  else
+    export NORD_BRAIN_PRESET=small
+  fi
+fi
+
+exec "$ROOT/.venv/bin/python" -m nord_brain "$@"

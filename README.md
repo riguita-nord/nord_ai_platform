@@ -43,22 +43,37 @@ Também aceita relações de atributos, como `Todos os gatos têm pelo.` e a per
 .venv/bin/python -m unittest tests.test_reasoning -v
 ```
 
-## Como iniciar
+## Instalação e arranque com um único comando
+
+Se ainda não tens o projeto descarregado (Linux/Ubuntu), cola esta **linha única** no terminal:
 
 ```bash
-git clone https://github.com/riguita-nord/nord_ai_platform.git
+git clone https://github.com/riguita-nord/nord_ai_platform.git && cd nord_ai_platform && bash install.sh
+```
+
+O instalador cria o ambiente virtual, instala PyTorch e abre imediatamente a conversa da Nord Brain. A primeira instalação requer **git, Python 3.10+, python3-venv e Internet** para descarregar dependências. Não usa sudo, não configura serviços systemd e não abre portas de rede.
+
+Se já tens o projeto, atualiza e inicia diretamente com:
+
+```bash
 cd nord_ai_platform
+git pull origin main
 bash install.sh
-.venv/bin/python -m nord_brain
 ```
 
-Para VM de 2 GB e 1 vCPU, testa o modelo mais pequeno numa pasta de dados própria:
+Para voltar a abrir a Nord Brain depois da primeira instalação, sem reinstalar:
 
 ```bash
-NORD_BRAIN_PRESET=tiny .venv/bin/python -m nord_brain --data ./dados-tiny
+./nord
 ```
 
-O Linux instala PyTorch CPU-only. Não suporta ESP32; mesmo com poucos parâmetros, o runtime PyTorch consome recursos adicionais. Um checkpoint `brain-v2.pt` existente continua a ser carregado automaticamente, preservando os pesos da V0.2. Há cópias de segurança antes de experiências de crescimento. Os checkpoints são locais e devem ser considerados ficheiros privados.
+O comando `./nord` verifica se o ambiente existe e inicia a IA. `bash install.sh --install-only` instala sem abrir a conversa. Para escolher onde guardar a memória, executa `./nord --data ./meu-cerebro`. O estado persistente é guardado em `~/.nord-brain/` por defeito e **não é eliminado** pelo instalador. Para sair da conversa, escreve `/sair`.
+
+Em Linux com aproximadamente **3 GB de RAM ou menos**, o launcher seleciona automaticamente o perfil `tiny` para um cérebro novo, considerando também limites cgroup v2 quando disponíveis. Em máquinas maiores usa `small`. Para forçar um perfil: `NORD_BRAIN_PRESET=tiny ./nord`. Um checkpoint existente determina a arquitetura carregada, independentemente da escolha atual.
+
+A Internet da IA continua desligada por defeito. Para permitir a pesquisa limitada: `NORD_INTERNET=on ./nord`.
+
+**Limitações:** este sistema instala e abre uma sessão interativa na consola; não arranca automaticamente com o sistema operativo, nem transforma a IA num serviço. PyTorch pode ocupar bastante disco e RAM. Em computadores Windows usa WSL para estes scripts Bash.
 
 ## Ensinar como numa conversa
 
