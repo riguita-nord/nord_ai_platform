@@ -102,6 +102,17 @@ class BrainTheoryTests(unittest.TestCase):
                 self.assertTrue(b.core.steps>=before)
             finally:b.close()
 
+    def test_manual_broad_lab_respects_mathematics_review(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            b=self.make_brain(tmp)
+            try:
+                b.chat('quero aprovar as hipóteses')
+                result,_=b.chat('experimenta matemática 1')
+                self.assertIn('revisão do professor ativa',result)
+                self.assertFalse(b.memory.db.execute(
+                    "SELECT 1 FROM lessons WHERE origin='cognitive_matematica'").fetchone())
+            finally:b.close()
+
     def test_rejection_blocks_replay_and_future_training(self):
         with tempfile.TemporaryDirectory() as tmp:
             b=self.make_brain(tmp)

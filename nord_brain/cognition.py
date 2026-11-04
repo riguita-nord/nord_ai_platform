@@ -178,6 +178,8 @@ class CognitiveLab:
         for an honest terminal report; it does not fake neural competence.
         """
         b=self.brain
+        if b.memory.review_required() and domain in ('matematica','padroes'):
+            return {'domain':domain,'status':'revisão do professor ativa: aprova as hipóteses na fila antes de treinar matemática'}
         case=self.candidate(domain)
         if case is None:
             return {'domain':domain,'status':'sem exemplos verificados disponíveis'}
