@@ -36,10 +36,25 @@ _DEMONSTRATION = re.compile(
 )
 
 
-def _as_expression(text: str) -> str | None:
+# Ambiguous literal forms (dates and numeric intervals) are not arithmetic
+# unless the speaker explicitly requests a calculation. This also avoids
+# treating dates such as 2026-11-4 as a series of subtractions.
+_DATE = re.compile(r'^\d{4}\s*[-/]\s*\d{1,2}\s*[-/]\s*\d{1,2}$')
+_RANGE = re.compile(r'^\d{1,5}\s*[-–]\s*\d{1,5}$')
+
+
+def _as_expression(text: str, *, explicitly_requested: bool = False) -> str | None:
     value = text.strip().rstrip('?!').strip()
     if value.endswith('.') and not re.search(r'\d\.\d$', value):
         value = value[:-1].strip()
+    if _DATE.fullmatch(value):
+        return None
+    if not explicitly_requested and _RANGE.fullmatch(value):
+        # "2-3" could mean players 2 to 3, a range, or a subtraction.
+        # Prefer asking for "quanto é 2-3" rather than deciding silently.
+        return None
+    if not explicitly_requested and re.fullmatch(r'\d{1,2}/\d{1,2}(?:/\d{2,4})?', value):
+        return None
     for words, sign in sorted(_OPERATORS.items(), key=lambda x: -len(x[0])):
         value = re.sub(r'\b' + re.escape(words) + r'\b', sign, value, flags=re.I)
     for word, number in _WORD_NUMBERS.items():
@@ -52,16 +67,20 @@ def _as_expression(text: str) -> str | None:
 
 
 def read_math_question(message: str) -> tuple[str, Reasoning] | None:
-    """Only a whole arithmetic request is considered a math question."""
+    """Accept maths only when the *entire* message is an arithmetic request.
+
+    Arithmetic fragments within a conversation, version, date, or player count
+    must never automatically become a calculator request.
+    """
     stripped = ' '.join(message.strip().split())
     if len(stripped) > 150:
         return None
     matched = _PREFIX.match(stripped)
-    # Conversational follow-up: 'e 3+5?' is another calculation, not prose.
+    # Follow-up "e 3+5" is mathematical, unlike a narrative beginning with 'e'.
     candidate = stripped[matched.end():] if matched else stripped
     if not matched and re.match(r'^e\s+', candidate, re.I):
         candidate = re.sub(r'^e\s+', '', candidate, flags=re.I)
-    expression = _as_expression(candidate)
+    expression = _as_expression(candidate, explicitly_requested=bool(matched))
     if expression is None:
         return None
     solution = calculate(expression)
@@ -79,18 +98,43 @@ class VerifiedExample:
     proof: Reasoning
 
 
-def read_math_example(message: str) -> VerifiedExample | None:
-    """Read and check a small explicitly stated equation inside an explanation.
+_MATH_FRAMING = re.compile(
+    # Anchored teaching cues, not arbitrary mention of 'conta' or 'resultado'
+    # somewhere in unrelated dialogue about an account or game server.
+    r'^(?:isto\s+(?:[ée]\s+)?matem[aá]tica|'
+    r'(?:o\s+)?resultado(?:\s+(?:correto|certo))?\s+(?:[ée]|de)|'
+    r'(?:a\s+)?(?:conta|equa[cç][aã]o|c[aá]lculo)\s+(?:[ée]|de)|'
+    r'(?:aprende|ensina-te|fica\s+a\s+saber)(?:\s+(?:que|esta\s+conta))?|'
+    r'(?:um\s+)?exemplo\s+de\s+matem[aá]tica(?:\s+[ée])?|'
+    r'vamos\s+calcular)\s*[,;:]?$', re.I,
+)
 
-    Text around the example is not stored as an answer. This avoids training
-    the entire instruction 'isto é matemática ...' as if it were a label.
+
+def read_math_example(message: str) -> VerifiedExample | None:
+    """Verify explicit math demonstrations, not incidental text with numbers.
+
+    Previously ``_DEMONSTRATION.search`` accepted any arithmetic-looking
+    fragment anywhere in a sentence. A player talking about code or game
+    players could thus trigger math hypotheses and unwanted neural training.
+    A stand-alone equation or a message *explicitly framed* as mathematical
+    teaching is now required. The bounds still reject unsafe expressions.
     """
     if len(message) > 450:
         return None
     match = _DEMONSTRATION.search(message)
     if not match:
         return None
+    prefix = message[:match.start()].strip(' \t\n\r,;:.!?"“”')
+    suffix = message[match.end():].strip(' \t\n\r,;:.!?"“”')
+    explicit_context = bool(_MATH_FRAMING.fullmatch(prefix))
+    # A bare equation is allowed, as is math-specific teaching context.
+    # Narrative suffixes ("tenho 2+2=4 carros") are not a demonstration.
+    if (prefix or suffix) and not explicit_context:
+        return None
     expr = match.group('expr').replace('×', '*').replace('÷', '/').replace('−', '-')
+    # Date-like content must not become a worked subtraction even in a demo.
+    if _DATE.fullmatch(expr):
+        return None
     proof = calculate(expr)
     if proof is None:
         return None

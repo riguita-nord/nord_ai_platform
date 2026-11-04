@@ -55,6 +55,36 @@ class NaturalMathTests(unittest.TestCase):
             self.assertIsNone(read_math_question(text),text)
         self.assertIsNone(read_math_example('Talvez 2+2 sejam 4'))
 
+    def test_numbers_in_conversation_are_not_auto_calculations(self):
+        dialogue = (
+            'Tenho 2+2=4 carros no servidor e quero falar contigo',
+            'Hoje expliquei 2+2 é 4 num exemplo da NUI',
+            'O meu código tem 3+5=8 e falha',
+            'Na minha conta do site tenho 2+2=4 scripts',
+            'A conta dos jogadores 3+5=8 aparece no painel',
+            'No servidor escrevi 5-2 e isto é um intervalo',
+            'estamos em 2026-11-4',
+            'Qual a data de 04/11/2026?',
+            '2-3',
+            '3/5',
+            '2026-11-4',
+        )
+        for phrase in dialogue:
+            with self.subTest(phrase=phrase):
+                self.assertIsNone(read_math_question(phrase))
+                self.assertIsNone(read_math_example(phrase))
+                self.assertNotIn(interpret(phrase).kind, ('math_question', 'math_example'))
+
+    def test_only_explicit_math_becomes_math(self):
+        self.assertEqual(read_math_question('3+5')[0], '3+5')
+        self.assertEqual(read_math_question('e 3+5')[0], '3+5')
+        self.assertEqual(read_math_question('Quanto é 2-3?')[0], '2-3')
+        self.assertEqual(read_math_question('calcula 3/5')[0], '3/5')
+        self.assertIsNone(read_math_question('Qual é o resultado de 2026-11-4?'))
+        self.assertTrue(read_math_example('2+2=4').verified)
+        self.assertTrue(read_math_example('isto matematica 2+2 e 4 seria o mesmo se te disse 2+2').verified)
+        self.assertFalse(read_math_example('2+2 é 5').verified)
+
     def test_unrelated_question_not_a_definition(self):
         self.assertEqual(interpret('e diz-me quanto é 2+2').kind,'math_question')
         self.assertNotEqual(interpret('Podes explicar como é o Python?').kind,'fact')
@@ -111,6 +141,28 @@ class IntegrationTests(unittest.TestCase):
         self.assertIn('não vou memorizar',answer.lower())
         self.assertEqual(self.brain.core.steps,start)
         self.assertIsNone(self.brain.memory.exact('Quem fez a máquina fictícia X?'))
+
+    def test_incidental_equations_do_not_seed_math_theories(self):
+        initial_steps=self.brain.core.steps
+        initial_theories=self.brain.memory.hypothesis_stats().get('pending',0)
+        examples=(
+            'Tenho 2+2=4 carros no servidor e quero falar contigo',
+            'O meu código tem 3+5=8 e falha',
+            'Na minha conta do site tenho 2+2=4 scripts',
+            'A conta dos jogadores 3+5=8 aparece no painel',
+            'A versão 1.2 do script precisa de ajuda',
+            'O porto está marcado 2026-11-4',
+        )
+        for phrase in examples:
+            reply,origin=self.brain.chat(phrase)
+            self.assertNotIn('hipóteses',reply,phrase)
+            self.assertNotIn('verificador matemático',origin,phrase)
+        self.assertEqual(self.brain.memory.hypothesis_stats().get('pending',0),initial_theories)
+        # Incidental numerical fragments are not lessons and cannot silently
+        # become teacher-confirmed math facts.
+        self.assertIsNone(self.brain.memory.exact('Quanto é 2+2?'))
+        self.assertIsNone(self.brain.memory.exact('Quanto é 3+5?'))
+        self.assertGreaterEqual(self.brain.core.steps,initial_steps)
 
     def test_regular_facts_and_self_report_still_work(self):
         answer,_=self.brain.chat('O Python é uma linguagem de programação.')
