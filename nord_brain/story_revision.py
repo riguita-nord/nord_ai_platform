@@ -53,7 +53,7 @@ def revise_story(original: str, kind: str = 'longer') -> str:
         # Provide a different structure while retaining established facts.
         kind = 'longer'
     scene_a = (
-        f'Antes de avançar, {name} percorreu devagar os corredores {where}. '
+        f'Antes de avançar, {name} percorreu devagar os caminhos da região onde vivia. '
         'O ar tinha o cheiro das coisas esquecidas e cada som parecia ficar suspenso '
         'por um instante. Reparou que pequenos detalhes, antes irrelevantes, '
         'formavam agora uma sequência: um sinal junto à porta, uma anotação no chão '
@@ -71,7 +71,7 @@ def revise_story(original: str, kind: str = 'longer') -> str:
         'fez perguntas que pareciam óbvias e que, mesmo assim, nunca tinham sido '
         'consideradas. Algumas hipóteses foram abandonadas. Outras ficaram anotadas '
         'para serem testadas no dia seguinte.\n\n'
-        f'Quando regressou {where}, {name} observou {discovery} sob uma luz diferente. '
+        f'Quando regressou ao local da descoberta, {name} observou {discovery} sob uma luz diferente. '
         'O objeto continuava o mesmo, mas a maneira de olhar para ele tinha mudado. '
         'Havia um caminho que parecia promissor e outro que oferecia uma saída fácil '
         'demais. Escolher o primeiro significava correr o risco de descobrir que '

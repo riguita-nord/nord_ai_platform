@@ -302,6 +302,58 @@ class Brain:
                           previous: dict[str,str]) -> tuple[str,str] | None:
         """Respond about the previous answer rather than memorising the prompt."""
         focus = previous['focus']
+        if kind == 'chapters':
+            if focus == 'book':
+                book=self.stories.active()
+                if book:
+                    return (f'A história «{book["title"]}» já está organizada em '
+                            f'capítulos ({book["written"]}/{book["planned"]}). '
+                            'Diz «continua a história» para escrever o seguinte, '
+                            'ou «plano do livro» para consultar a estrutura.'), \
+                           'livro persistente; contexto reconhecido'
+            if focus == 'story':
+                story_turn=self.dialogue.latest_story()
+                original=story_turn['reply'] if story_turn else previous['reply']
+                try:
+                    adopted=self.stories.adopt_story(original,chapters=10)
+                except ValueError:
+                    adopted=None
+                if adopted is not None:
+                    parts='\n\n'.join(
+                        f'Capítulo {ch["number"]} — {ch["title"]}\n\n{ch["body"]}'
+                        for ch in adopted['chapters'])
+                    return (f'{adopted["book"]["title"]}\n\n{parts}\n\n'
+                            f'Guardei este enredo como um livro com '
+                            f'{adopted["book"]["planned"]} capítulos planeados. '
+                            'As primeiras partes preservam a história que já criámos. '
+                            'Diz «continua a história» para desenvolver o capítulo '
+                            'seguinte, ou «plano do livro» para ver a estrutura.'), \
+                           'livro persistente; história da conversa organizada em capítulos'
+        if kind == 'refine' and focus == 'story':
+            story_turn=self.dialogue.latest_story()
+            original=story_turn['reply'] if story_turn else previous['reply']
+            prompt=('Reformula a MESMA história em português europeu, respeitando '
+                    'rigorosamente esta alteração pedida pelo utilizador: '
+                    +message[:200]+'. Preserva os nomes e os acontecimentos que '
+                    'já existem. Responde apenas com a prosa revista.\n'
+                    'HISTÓRIA ANTERIOR:\n'+original[:5200])
+            output=self.language.generate(prompt,creative=True,max_tokens=1200,
+                                          remember=False)
+            if output and len(output.strip())>=len(original)*0.65:
+                return output,'ficção contextual revista pelo modelo local'
+            # The offline generator can add development/dialogue, but cannot
+            # promise arbitrary transformations of tone, register or style.
+            from .dialogue import normalize
+            instruction=normalize(message)
+            if any(word in instruction for word in
+                   ('detalh', 'dialog', 'desenvolv', 'cenas', 'mais texto')):
+                return revise_story(original,'longer'), \
+                       'ficção contextual procedural (expansão limitada)'
+            return ('Continuamos na mesma história. Percebi a alteração: «'
+                    +message[:180]+'». Não consigo reescrever livremente o estilo '
+                    'com o modelo local desligado. Podes pedir uma versão mais '
+                    'longa, capítulos ou continuação, que consigo fazer offline.'), \
+                   'continuidade contextual sem modelo linguístico'
         if kind == 'reference' and focus in ('story','book'):
             original = previous['reply']
             if focus == 'book':
@@ -360,7 +412,7 @@ class Brain:
                 output = revise_story(source_story,kind)
                 return output, 'ficção contextual procedural (sem modelo pré-treinado)'
             return output, 'ficção contextual gerada pelo modelo linguístico local'
-        if kind in ('explain','discuss','reference','shorter','longer','rewrite','continue'):
+        if kind in ('explain','discuss','reference','shorter','longer','rewrite','continue','refine','chapters'):
             prompt = (
                 'Continua a conversa em português europeu. Usa o histórico recente '
                 'e mantém o assunto. Interpreta «ele», «isso» ou pedidos de revisão '

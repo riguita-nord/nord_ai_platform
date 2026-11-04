@@ -75,6 +75,42 @@ class DialogueTests(unittest.TestCase):
             intent=interpret(message,'Pergunta antiga?',True)
             self.assertNotIn(intent.kind,('explanation','correction','teach','fact'),message)
 
+    def test_live_transcript_story_to_chapters_and_followup(self):
+        with tempfile.TemporaryDirectory() as root,patch.dict('os.environ',{'NORD_LLM':'off'}):
+            b=self.brain(root)
+            try:
+                training_steps=b.core.steps
+                first,_=b.chat('conta-me uma historia')
+                longer,_=b.chat('faz mais extenso')
+                chaptered,origin=b.chat('com capitulos e etc')
+                self.assertGreater(len(longer),len(first))
+                self.assertIn('Capítulo 1',chaptered)
+                self.assertIn('Capítulo 2',chaptered)
+                self.assertIn('Capítulo 3',chaptered)
+                self.assertEqual(b.stories.active()['written'],3)
+                self.assertIn(first.split('\n\n',1)[1].split(',',1)[0],chaptered)
+                self.assertEqual(b.dialogue.latest()['focus'],'book')
+                self.assertFalse(b.awaiting_explanation)
+                self.assertIsNone(b.memory.exact('com capitulos e etc'))
+                self.assertEqual(b.core.steps,training_steps)
+                next_chapter,_=b.chat('continua a historia')
+                self.assertIn('Capítulo 4',next_chapter)
+                self.assertEqual(b.stories.active()['written'],4)
+            finally:b.close()
+
+    def test_context_refinement_in_story_is_not_teacher_training(self):
+        with tempfile.TemporaryDirectory() as root,patch.dict('os.environ',{'NORD_LLM':'off'}):
+            b=self.brain(root)
+            try:
+                original,_=b.chat('conta-me uma historia')
+                count=b.memory.lesson_count()
+                revised,origin=b.chat('com mais diálogos')
+                self.assertGreater(len(revised),len(original))
+                self.assertIn('Nuno' if 'Nuno' in original else original.split('\n\n',1)[1].split(',',1)[0],revised)
+                self.assertEqual(b.memory.lesson_count(),count)
+                self.assertFalse(b.awaiting_explanation)
+            finally:b.close()
+
     def test_continue_rewrite_and_other_story_followups(self):
         with tempfile.TemporaryDirectory() as root,patch.dict('os.environ',{'NORD_LLM':'off'}):
             b=self.brain(root)

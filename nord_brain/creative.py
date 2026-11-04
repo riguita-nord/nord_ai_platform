@@ -68,10 +68,12 @@ def story(theme: str, *, rng: random.Random | None=None) -> str:
                 f'3. Envolver pessoas com experiências diferentes e comparar resultados.\n'
                 'Escolheria primeiro um pequeno teste e avaliaria custo, risco e utilidade. '
                 'Estas são sugestões experimentais, não resultados comprovados.')
+    feminine=person.split(',',1)[0] in ('Inês','Lia','Mara')
+    youngster='pequena' if feminine else 'pequeno'
     title=rng.choice(('A pergunta esquecida','O mapa do impossível','A última experiência',
                       'O segredo da oficina','O dia em que tudo mudou'))
     return (f'{title}\n\n'
-        f'{person} vivia {place}. Desde pequena, havia uma ideia que lhe tirava o sono: {clean}. '
+        f'{person} vivia {place}. Desde {youngster}, havia uma ideia que lhe tirava o sono: {clean}. '
         f'Numa manhã de chuva, encontrou {found}. Não parecia importante, até perceber que '
         'o objeto reagia de forma diferente a cada pergunta.\n\n'
         f'Quando tentou explicar o que descobrira, percebeu que {conflict}. '

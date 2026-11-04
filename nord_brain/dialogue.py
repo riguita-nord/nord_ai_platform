@@ -24,6 +24,28 @@ def followup_kind(message: str) -> str | None:
     t = re.sub(r'\s+por favor$', '', t)
     if not t:
         return None
+    # Elliptical edits: users often add a constraint to the previous answer
+    # ("com capítulos e etc.", "sem spoilers", "em pontos", "com diálogos").
+    # These are contextual requests, NEVER teacher labels. The active topic
+    # is checked by Brain before routing; this parser does not invent one.
+    if len(t) <= 150:
+        if (re.search(r'\bcapitulos?\b', t)
+                and re.match(r'^(?:(?:e|agora|entao)\s+)?'
+                             r'(?:(?:com|em|por|dividid[oa]s?\s+em|'
+                             r'organiza(?:\s+isso)?\s+em|'
+                             r'transforma(?:\s+isso)?\s+em|'
+                             r'faz(?:\s+isso)?\s+(?:com|em)|'
+                             r'quero(?:\s+isso)?\s+(?:com|em))\b)',t)):
+            return 'chapters'
+        if re.match(r'^(?:(?:e|agora|entao)\s+)?(?:com|sem|em|por|'
+                    r'no\s+estilo\s+de)\s+\S',t) and not re.match(
+                    r'^(?:com\s+(?:quem|o\s+que)|em\s+(?:que|qual|quanto|onde)|'
+                    r'por\s+(?:que|quem)|sem\s+(?:quem|o\s+que))\b',t):
+            return 'refine'
+        if re.match(r'^(?:faz|escreve|torna|organiza|reescreve|transforma|'
+                    r'apresenta|mostra|mete|poe|coloca)(?:\s+(?:isso|a\s+historia|'
+                    r'o\s+texto|a\s+resposta))?\s+(?:com|sem|em|por)\s+\S',t):
+            return 'refine'
     if re.fullmatch(r'(?:faz|escreve|cria|conta(?: me)?|quero|podes fazer)\s+'
                     r'(?:(?:uma|a|o|isso|a historia|o texto|uma versao)\s+)?'
                     r'(?:(?:versao|historia|texto)\s+)?(?:muito\s+)?'

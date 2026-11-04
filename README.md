@@ -1,3 +1,40 @@
+# Nord Brain V1.9 — instruções incompletas e continuidade real
+
+Quando um pedido curto acrescenta algo ao que acabou de ser dito — por exemplo,
+**«com capítulos e etc.»**, **«sem spoilers»**, **«em tópicos»** ou
+**«com mais diálogos»** — a Nord Brain tenta interpretá-lo como alteração
+ao assunto atual, e **não como uma resposta para treinar**.
+
+Exemplo:
+
+```text
+tu> conta-me uma historia
+nord> [conto original]
+tu> faz mais extenso
+nord> [mesma história desenvolvida]
+tu> com capítulos e etc
+nord> [Capítulo 1, 2, 3 da história anterior; livro guardado]
+tu> continua a história
+nord> [Capítulo 4 do mesmo livro]
+tu> plano do livro
+nord> [plano e progresso persistente]
+```
+
+A conversão para capítulos preserva os parágrafos existentes e guarda as
+personagens, o cenário e a descoberta como base para futuros capítulos.
+Fica em `~/.nord-brain/stories.sqlite3`, sem substituir lições nem pesos.
+O modelo local de linguagem, quando instalado, pode reescrever conteúdo e
+entender alterações de estilo mais livres; sem ele, as reformulações são
+limitadas aos tipos de transformação que o sistema suporta. **A memória
+de contexto não torna o pequeno Transformer fluente por si só.**
+
+O histórico de conversas mantém-se separado da aprendizagem. A versão V1.9
+inclui testes de regressão para pedidos elípticos e continuidade entre
+mensagens. Para verificar: `python -m unittest discover -s tests -p
+'test_context_ellipses_v19.py' -v`.
+
+---
+
 # Nord Brain V1.8 — contexto conversacional por assunto
 
 A memória de conversa é partilhada por **todos os módulos**. A Nord Brain mantém até **480 interações locais** em `~/.nord-brain/dialogue.sqlite3`, recuperando as **oito interações recentes** e até **três interações antigas relevantes** para cada nova mensagem ao chamar o modelo local. A recuperação é lexical e leve para CPU, não equivale a compreensão semântica perfeita.

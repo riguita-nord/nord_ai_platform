@@ -148,6 +148,66 @@ class StoryStudio:
             self.db.execute('INSERT OR REPLACE INTO book_meta(key,value) VALUES(?,?)',('active',str(book_id)))
         return self.active()
 
+    def adopt_story(self, narrative: str, *, chapters: int = 10) -> dict:
+        """Turn the current short story into a persistent book, not a NEW plot.
+
+        Preserve every existing paragraph in order. Split the narrative into
+        three opening chapters and save its actual protagonist/setting/discovery
+        as the story bible so later chapters continue the same world.
+        """
+        if not 4 <= chapters <= 24:
+            raise ValueError('O livro deve ter entre 4 e 24 capítulos.')
+        text=narrative.strip()
+        parts=[part.strip() for part in re.split(r'\n\s*\n',text) if part.strip()]
+        if len(parts)<2 or len(text)<180:
+            raise ValueError('Não há uma história completa para transformar em livro.')
+        title=parts[0].splitlines()[0].strip()[:110]
+        if len(parts[0])<130 and len(parts)>2 and title and not title.endswith(('.', '!', '?')):
+            paragraphs=parts[1:]
+        else:
+            title='A história que começámos'
+            paragraphs=parts
+        if len(paragraphs)<2:
+            raise ValueError('Preciso de mais conteúdo antes de criar capítulos.')
+
+        from .story_revision import _elements
+        protagonist, setting, discovery=_elements(text)
+        if protagonist=='a protagonista':
+            protagonist=paragraphs[0].split(',',1)[0].strip()[:70] or protagonist
+        conflict='o mistério apresentado nos primeiros acontecimentos'
+        for paragraph in paragraphs:
+            match=re.search(r'\bpercebeu que (.+?)[.!?]',paragraph,re.I|re.S)
+            if match:
+                conflict=match.group(1).strip()[:240]
+                break
+
+        book=self.create(title,chapters=chapters)
+        bible={'protagonist':protagonist,'setting':setting,
+               'discovery':discovery,'conflict':conflict,
+               'theme':title,'origin':'adopted_conversation_story'}
+        chunks=[]
+        count=min(3,len(paragraphs))
+        for index in range(count):
+            # Consecutive balanced chunks, so not a single paragraph is lost.
+            start=(index*len(paragraphs))//count
+            end=((index+1)*len(paragraphs))//count
+            chunks.append('\n\n'.join(paragraphs[start:end]))
+        chapter_titles=('O início', 'O enigma', 'A escolha')
+        now=int(time.time())
+        with self.db:
+            self.db.execute('UPDATE books SET title=?,theme=?,bible=? WHERE id=?',
+                            (title,title,json.dumps(bible,ensure_ascii=False),book['id']))
+            for n,body in enumerate(chunks,1):
+                recap=(f'Início: {body[:200].strip()} '
+                       f'Final: {body[-250:].strip()}')[:550]
+                self.db.execute(
+                    'INSERT INTO chapters(book_id,number,title,body,recap,created) '
+                    'VALUES(?,?,?,?,?,?)',
+                    (book['id'],n,chapter_titles[n-1],body,recap,now))
+        return {'book':self.active(),
+                'chapters':[{'number':n,'title':chapter_titles[n-1],'body':body}
+                            for n,body in enumerate(chunks,1)]}
+
     def active(self) -> dict | None:
         row=self.db.execute('''SELECT b.id,b.title,b.theme,b.planned,b.seed,b.bible,
                                   (SELECT COUNT(*) FROM chapters c WHERE c.book_id=b.id)

@@ -140,7 +140,7 @@ def main(argv=None):
     parser.add_argument('--data',type=Path,default=Path(os.environ.get('NORD_DATA',str(Path.home()/'.nord-brain'))))
     args=parser.parse_args(argv)
     brain=Brain(args.data)
-    print('Nord Brain v1.8 | contexto por assunto + memória de conversa + linguagem local opcional')
+    print('Nord Brain v1.9 | contexto contínuo + livros por capítulos + linguagem local opcional')
     print('Fala normalmente. Escreve /ajuda para exemplos ou /sair para terminar.')
     try:
         while True:
