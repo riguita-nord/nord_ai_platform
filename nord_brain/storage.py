@@ -9,7 +9,7 @@ class Memory:
     def __init__(self, path: Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True,exist_ok=True)
-        self.db = sqlite3.connect(self.path)
+        self.db = sqlite3.connect(self.path, check_same_thread=False)
         self.db.execute('PRAGMA journal_mode=WAL')
         self.db.executescript('''
         CREATE TABLE IF NOT EXISTS lessons (
@@ -28,12 +28,21 @@ class Memory:
         CREATE TABLE IF NOT EXISTS metrics (
             id INTEGER PRIMARY KEY, event TEXT NOT NULL, value REAL NOT NULL, created INTEGER NOT NULL);
         ''')
+        self.db.executescript('''
+        CREATE TABLE IF NOT EXISTS unknown_topics (
+            topic TEXT PRIMARY KEY, attempts INTEGER NOT NULL DEFAULT 0,
+            searched INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS autonomy_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS autonomy_events (
+            id INTEGER PRIMARY KEY, kind TEXT NOT NULL, detail TEXT NOT NULL,
+            value REAL, created INTEGER NOT NULL);
+        ''')
         self.db.commit()
 
     def teach(self, question: str, answer: str, origin: str = 'teacher') -> int:
         question,answer=question.strip(),answer.strip()
-        if not 1 <= len(question) <= 250 or not 1 <= len(answer) <= 350:
-            raise ValueError('Exemplos limitados a 250/350 caracteres')
+        if not 1 <= len(question) <= 250 or not 1 <= len(answer) <= 500:
+            raise ValueError('Exemplos limitados a 250/500 caracteres')
         with self.db:
             cur=self.db.execute('INSERT INTO lessons(question,answer,origin,created) VALUES(?,?,?,?)',
                             (question,answer,origin,int(time.time())))
@@ -70,7 +79,7 @@ class Memory:
                 (topic,title,url,summary,int(time.time())))
 
     def holdout(self,question,answer):
-        if not 1 <= len(question) <= 250 or not 1 <= len(answer) <= 350:
+        if not 1 <= len(question) <= 250 or not 1 <= len(answer) <= 500:
             raise ValueError('Teste inválido')
         if self.db.execute('SELECT 1 FROM lessons WHERE lower(question)=lower(?)', (question.strip(),)).fetchone():
             raise ValueError('Esta pergunta já foi ensinada; usa um teste novo')
@@ -83,6 +92,47 @@ class Memory:
     def metric(self,event,value):
         with self.db:
             self.db.execute('INSERT INTO metrics(event,value,created) VALUES(?,?,?)',(event,float(value),int(time.time())))
+
+    def unique_lesson_count(self):
+        return self.db.execute('SELECT COUNT(DISTINCT lower(question)) FROM lessons').fetchone()[0]
+
+    def get_meta(self,key,default=None):
+        row=self.db.execute('SELECT value FROM autonomy_meta WHERE key=?',(key,)).fetchone()
+        return row[0] if row else default
+
+    def set_meta(self,key,value):
+        with self.db:
+            self.db.execute('INSERT INTO autonomy_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',(key,str(value)))
+
+    def unknown(self, topic):
+        topic=topic.strip().strip('?.!')[:90]
+        if len(topic)<2:return
+        with self.db:
+            self.db.execute('INSERT OR IGNORE INTO unknown_topics(topic,created) VALUES(?,?)',
+                            (topic,int(time.time())))
+
+    def next_unknown(self):
+        row=self.db.execute('SELECT topic FROM unknown_topics WHERE searched=0 ORDER BY created LIMIT 1').fetchone()
+        return row[0] if row else None
+
+    def unknown_searched(self, topic):
+        with self.db:
+            self.db.execute('UPDATE unknown_topics SET searched=1,attempts=attempts+1 WHERE topic=?',(topic,))
+
+    def event(self,kind,detail,value=None):
+        with self.db:
+            self.db.execute('INSERT INTO autonomy_events(kind,detail,value,created) VALUES(?,?,?,?)',
+                        (kind,detail,float(value) if value is not None else None,int(time.time())))
+
+    def recent_events(self,limit=10):
+        return self.db.execute('SELECT kind,detail,value FROM autonomy_events ORDER BY id DESC LIMIT ?',(limit,)).fetchall()
+
+    def recent_losses(self,count=3):
+        return [r[0] for r in self.db.execute(
+            "SELECT value FROM autonomy_events WHERE kind='eval_loss' ORDER BY id DESC LIMIT ?",(count,)).fetchall()][::-1]
+
+    def observation_for_topic(self, topic):
+        return self.db.execute('SELECT title,url,summary FROM observations WHERE lower(topic)=lower(?) ORDER BY id DESC LIMIT 1',(topic,)).fetchone()
 
     def close(self):
         self.db.close()

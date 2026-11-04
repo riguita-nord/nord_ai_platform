@@ -236,24 +236,70 @@ class NeuralCore:
     def train(self, prompt: str, answer: str, epochs: int = 2, rate: float = 3e-4) -> float:
         if not 1 <= epochs <= 25 or not 0 < rate <= .01:
             raise ValueError('Épocas ou taxa de aprendizagem inválidas')
-        tokens, labels = self._example(prompt, answer, self.model.config.context)
+        windows = self._training_windows(prompt, answer, self.model.config.context)
         self.model.train()
         for group in self.optimizer.param_groups:
             group['lr'] = rate
         loss_value = float('nan')
         for _ in range(epochs):
-            self.optimizer.zero_grad(set_to_none=True)
-            logits = self.model(tokens)
-            loss = F.cross_entropy(logits.reshape(-1, VOCAB_SIZE), labels.reshape(-1), ignore_index=-100)
-            if not torch.isfinite(loss):
-                raise FloatingPointError('Erro numérico no treino')
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-            self.optimizer.step()
-            self.steps += 1
-            loss_value = float(loss.detach())
+            for tokens, labels in windows:
+                self.optimizer.zero_grad(set_to_none=True)
+                logits = self.model(tokens)
+                loss = F.cross_entropy(logits.reshape(-1, VOCAB_SIZE), labels.reshape(-1), ignore_index=-100)
+                if not torch.isfinite(loss):
+                    raise FloatingPointError('Erro numérico no treino')
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                self.optimizer.step()
+                self.steps += 1
+                loss_value = float(loss.detach())
         self.model.eval()
         return loss_value
+
+    @torch.inference_mode()
+    def score(self, examples: list[tuple[str, str]]) -> float:
+        """Mean answer-token cross-entropy on evaluation examples, never trains."""
+        if not examples:
+            raise ValueError('Não existem exemplos de avaliação')
+        self.model.eval()
+        losses=[]
+        for question,answer in examples:
+            for ids,labels in self._training_windows(question,answer,self.model.config.context):
+                logits=self.model(ids)
+                per=F.cross_entropy(logits.reshape(-1,VOCAB_SIZE),labels.reshape(-1),
+                                    ignore_index=-100,reduction='sum')
+                tokens=int((labels!=-100).sum())
+                if tokens:losses.append((float(per),tokens))
+        return sum(value for value,n in losses)/sum(n for value,n in losses)
+
+    @staticmethod
+    def _training_windows(prompt: str, answer: str, context: int):
+        """Full-answer supervision using bounded overlapping context windows.
+
+        Each predicted answer byte is scored once; prompt bytes are context,
+        not training targets. Handles UTF-8 and long explanations without
+        silently discarding the answer.
+        """
+        prefix = ('Pergunta: ' + prompt + '\nResposta: ').encode('utf-8')
+        targets = answer.encode('utf-8')
+        if not targets:
+            raise ValueError('Resposta vazia')
+        # The BOS or earliest prompt bytes may fall outside later windows.
+        full = [BOS] + list(prefix) + list(targets) + [EOS]
+        first_target = 1 + len(prefix)
+        stride = max(12, context // 3)
+        result=[]
+        for first in range(first_target, len(full), stride):
+            end = min(len(full), first + stride)
+            left = max(0, end - context)
+            # Training inputs predict tokens at positions left+1 .. end-1.
+            left=min(left,first-1)
+            ids=torch.tensor(full[left:end-1],dtype=torch.long).unsqueeze(0)
+            labels=torch.tensor(full[left+1:end],dtype=torch.long).unsqueeze(0)
+            mask=max(0,first-left-1)
+            labels[0,:mask]=-100
+            result.append((ids,labels))
+        return result
 
     @torch.inference_mode()
     def generate(self, prompt: str, max_bytes: int = 100, temperature: float = .7) -> str:

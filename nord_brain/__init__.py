@@ -1,2 +1,2 @@
-"""Nord Brain: terminal-first experimental lifelong-learning neural system."""
-__version__ = '0.2.0'
+"""Nord Brain: small experimental Transformer with continual learning."""
+__version__='0.3.0'

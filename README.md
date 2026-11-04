@@ -1,12 +1,8 @@
-# Nord Brain 0.2 — Transformer próprio e aprendizagem pelo terminal
+# Nord Brain V0.3 — aprendizagem autónoma e conversa pelo terminal
 
-**Protótipo experimental de investigação.** O núcleo atual já não é uma RNN, nem depende de Qwen, Ollama ou pesos de modelos externos. É um **Transformer decoder-only com pesos inicializados de raiz**, inspirado em componentes arquiteturais utilizados pela família Qwen: **atenção causal com GQA, RoPE, RMSNorm e MLP SwiGLU**. Não tem qualquer conhecimento linguístico treinado inicialmente, pelo que as primeiras gerações podem ser incoerentes.
+**Projeto experimental, sem pesos pré-treinados.** O cérebro é um Transformer próprio em PyTorch (atenção causal/GQA, RoPE, RMSNorm e SwiGLU) e **não usa o Qwen nem Ollama**. A arquitetura está preparada para aprender pesos, guardar experiências e experimentar expansão neuronal. **Não é equivalente a um LLM treinado; não compreende português fluentemente e não existe garantia de inteligência geral.**
 
-A versão 0.2 prova funcionalidades técnicas: treino real dos parâmetros, memória persistente, causalidade, crescimento da MLP sem alterar de imediato a função e armazenamento de experiências. **Não demonstra inteligência geral, fluência em português, autonomia de investigação nem crescimento inteligente automático.**
-
-## Instalar e iniciar
-
-Requer Python 3.10+ e PyTorch 2.2+ com suporte a CPU. Em Linux, recomenda-se o PyTorch **CPU-only**, pois as rodas PyPI padrão podem descarregar dependências CUDA desnecessárias. Numa máquina com GPU consulta a instalação PyTorch apropriada ao hardware.
+## Como iniciar
 
 ```bash
 git clone https://github.com/riguita-nord/nord_ai_platform.git
@@ -15,90 +11,111 @@ bash install.sh
 .venv/bin/python -m nord_brain
 ```
 
-O `install.sh` instala PyTorch CPU-only em Linux. Para instalação manual ou noutros sistemas:
+Para VM de 2 GB e 1 vCPU, testa o modelo mais pequeno numa pasta de dados própria:
 
 ```bash
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m nord_brain
+NORD_BRAIN_PRESET=tiny .venv/bin/python -m nord_brain --data ./dados-tiny
 ```
 
-Windows: ativa `.venv\Scripts\activate` e executa `python -m nord_brain`. As dependências de PyTorch ainda podem ocupar bastante disco e memória: mesmo o preset `tiny` **não é adequado a um ESP32** nem constitui um runtime C++ de produção.
+O Linux instala PyTorch CPU-only. Não suporta ESP32; mesmo com poucos parâmetros, o runtime PyTorch consome recursos adicionais. Um checkpoint `brain-v2.pt` existente continua a ser carregado automaticamente, preservando os pesos da V0.2. Há cópias de segurança antes de experiências de crescimento. Os checkpoints são locais e devem ser considerados ficheiros privados.
 
-### Perfis
+## Ensinar como numa conversa
 
-O modelo selecionado na **primeira execução** fica preservado no checkpoint, mesmo que mudes a variável posteriormente:
-
-| Preset | Camadas | Dimensão | Attention / KV | MLP | Contexto | Aproximadamente |
-|---|---:|---:|---:|---:|---:|---:|
-| `tiny` | 2 | 64 | 2 / 1 | 192 | 128 | 0,12M pesos |
-| `small` (padrão) | 4 | 128 | 4 / 2 | 384 | 256 | 0,82M pesos |
-| `medium` | 6 | 192 | 6 / 3 | 512 | 384 | 2,49M pesos |
-
-```bash
-NORD_BRAIN_PRESET=tiny .venv/bin/python -m nord_brain --data ./meu-cerebro
-```
-
-Para mudar de arquitetura de forma segura, usa uma **pasta de dados nova**. Os pesos de diferentes tamanhos não são intercambiáveis automaticamente.
-
-## Interagir e ensinar
+O ensino já não exige `/ensinar`. Alguns exemplos reconhecidos pelo **pequeno interpretador de português**, que é auxiliar ao modelo (não se deve confundir com raciocínio neuronal):
 
 ```text
-nord> /ajuda
-nord> /cerebro
-nord> /ensinar olá => olá!
-nord> /ensinar como te chamas? => Sou a Nord Brain.
-nord> /perguntar olá
-nord> /neuronal olá
-nord> /praticar 10
-nord> /teste quanto é 3 mais 2? => cinco
-nord> /avaliar
-nord> /crescer 16
-nord> /guardar
-nord> /sair
+tu> Olá
+nord> Olá! Estou a aprender. Podes ensinar-me algo ou fazer uma pergunta.
+
+tu> Chamo-me Ricardo.
+nord> Prazer! Aprendi que te chamas Ricardo.
+
+tu> O Python é uma linguagem de programação.
+nord> Entendido. Aprendi a descrição de Python.
+
+tu> O que é Python?
+nord> Python é uma linguagem de programação.
+
+tu> Quanto é 2 + 2?
+nord> Ainda não sei responder. Podes explicar-me?
+
+tu> É 4.
+nord> Entendido. Guardei o exemplo e atualizei os pesos neuronais.
+
+tu> O que aprendeste?
+nord> Já fiz ... passos de treino ...
 ```
 
-- `/ensinar` modifica **efetivamente** os pesos, com gradient descent (AdamW), usando a sequência de resposta como alvo de treino. Também guarda a experiência em SQLite para revisão.
-- `/perguntar` pode devolver a resposta **exata da memória simbólica**: a origem é identificada e não conta como compreensão neuronal.
-- `/neuronal` ignora a memória e tenta gerar apenas com os pesos do Transformer. As respostas podem ser inválidas.
-- `/teste` regista exemplos **não incluídos no treino** e bloqueia ensinar exatamente essas perguntas. `/avaliar` usa geração determinística para medir respostas exatas, mas a avaliação é limitada e não prova raciocínio geral.
-- `/crescer 16` acrescenta 16 canais em cada MLP preservando inicialmente a saída; reinicia o estado do otimizador porque as matrizes mudaram de dimensão. **Não acrescenta conhecimento por si só.**
+Também podes dizer `Quando eu perguntar X, responde Y.` e `Não, a resposta correta é Y.` depois de uma pergunta. Estes padrões **atualizam os pesos com PyTorch**, guardam o exemplo e permitem revisões futuras. A resposta a uma pergunta já ensinada pode vir diretamente da memória SQLite. **Isso não demonstra que o Transformer compreendeu a resposta.** Para ver a origem, utiliza `NORD_SHOW_ORIGIN=on`.
 
-O tokenizer inicial é **UTF-8 por bytes** (258 IDs, incluindo dois tokens de controlo). Qualquer texto português é representável sem reconstruir vocabulário. Um ficheiro de **493 sementes lexicais** ajuda a futura aprendizagem orientada, mas **não** treina os pesos por si só; a compreensão da língua não nasce do dicionário.
+O interpretador não entende qualquer frase livre: só reconhece padrões simples de ensino, correção e pergunta. Se encontra uma pergunta que não sabe, pede explicação em vez de fingir certeza. A geração neuronal sem pré-treino pode ser incoerente.
 
-## Componentes da arquitetura
+## Aprendizagem realmente automática
 
-- `nord_brain/core.py` — Transformer, RMSNorm, RoPE, GQA, SwiGLU, treino, geração, expansão e checkpoint com modelo + AdamW.
-- `nord_brain/runtime.py` — orquestra o cérebro, replays, memória, avaliações e perfis.
-- `nord_brain/storage.py` — SQLite: lições, conceitos, observações, métricas e testes separados.
-- `nord_brain/vocabulary.py` — palavras iniciais com categorias, não pré-treino.
-- `nord_brain/internet.py` — pesquisa manual limitada a Wikipédia em português com timeout, limites e URL de origem.
-- `nord_brain/cli.py` — interface de terminal sem servidor web.
-- `tests/test_brain.py` — causalidade, treino, persistência, expansão e separação memória/rede.
+Um agente local executa um ciclo de aprendizagem por defeito a cada 60 segundos, enquanto o processo está aberto:
 
-## Internet opcional
+1. Escolhe um exercício simples de aritmética com resposta verificável. Um conjunto de casos separados **não é usado para ensinar**.
+2. Efetua um pequeno passo de treino dos pesos, conserva o checkpoint e revê uma experiência anterior para reduzir esquecimento.
+3. A cada quatro ciclos, avalia a perda sobre exemplos de teste independentes.
+4. Se os resultados estagnarem, existir experiência suficiente e houver memória disponível, propõe uma expansão de 16 canais MLP em cada camada.
+5. Compara um treino extra **sem expansão** com o **mesmo treino após expansão**. Só aceita o crescimento se os exemplos independentes melhorarem mais com a expansão; caso contrário, reverte o checkpoint.
 
-Desligada por defeito. Liga com:
+A melhoria é experimental. Novos neurónios **não tornam automaticamente a IA mais inteligente**. A avaliação usa tarefas muito simples, por isso uma melhoria não demonstra linguagem ou raciocínio geral. O agente nunca treina automaticamente com respostas inventadas pelo próprio Transformer.
+
+O treino de exercícios é limitado, não envolve processos externos e utiliza uma única thread de treino protegida por um lock. Os eventos, incluindo rejeições de crescimento, são guardados em SQLite e aparecem no `/cerebro`.
+
+### Configuração
+
+| Variável | Por defeito | Objetivo |
+|---|---|---|
+| `NORD_BRAIN_PRESET` | `small` | `tiny`, `small`, `medium` na primeira execução |
+| `NORD_AUTO_TRAIN` | `on` | Revisão e treino periódico |
+| `NORD_AUTO_EXPERIMENTS` | `on` | Gerar experiências aritméticas verificáveis |
+| `NORD_AUTO_GROW` | `on` | Experimentar crescimento condicionado a testes |
+| `NORD_AUTO_INTERVAL` | `60` | Segundos entre ciclos (mínimo 5) |
+| `NORD_MAX_PARAMS` | `3000000` | Limite máximo de parâmetros |
+| `NORD_MAX_MLP_WIDTH` | `1024` | Limite de canais por MLP |
+| `NORD_INTERNET` | `off` | Autorizar pesquisa pública limitada |
+| `NORD_AUTONOMOUS_RESEARCH` | `on` | Pesquisar dúvidas pendentes, mas só quando a Internet está ativa |
+| `NORD_SHOW_ORIGIN` | `off` | Mostrar origem de cada resposta |
+| `NORD_THREADS` | `1` | Threads de CPU do PyTorch |
+
+Exemplo de pesquisa com autonomia, mantendo fonte não verificada:
 
 ```bash
-NORD_INTERNET=on .venv/bin/python -m nord_brain
+NORD_INTERNET=on NORD_AUTONOMOUS_RESEARCH=on NORD_BRAIN_PRESET=tiny .venv/bin/python -m nord_brain
 ```
 
-O comando `/pesquisar água` consulta somente uma origem HTTPS permitida, guarda título, URL e um excerto, marcado como **não verificado**. **Não há treino automático a partir da Internet**, nem execução do conteúdo de páginas. Futura integração de fontes, experiências ou navegadores deve manter isolamento, validação e autorizações.
+A pesquisa usa **apenas a API da Wikipédia em português**: HTTPS, tamanho e tempo limitados, sem URL livre nem redirecionamentos. Os excertos são guardados como observações **não verificadas** e não são transformados automaticamente em exemplos de treino. Acesso livre e treino direto de qualquer página seriam inseguros e podem degradar o modelo. Internet não equivale a ter conhecimento validado.
 
-## Limitações e migração
+## Estrutura
 
-- A aprendizagem é supervisionada e incremental: precisa de **muitos exemplos e avaliações** para desenvolver linguagem útil. A taxa de perda diminuir não implica compreensão.
-- O crescimento é manual e limitado às MLPs; não existe ainda escolha automática de quando crescer, poda sináptica ou um sistema provado de aprendizagem geral ao longo da vida.
-- O checkpoint V2 é `~/.nord-brain/brain-v2.pt`, preservando intacto o antigo `brain.npz` RNN V0.1. **Não existe conversão entre pesos RNN e Transformer.** O vocabulário, a memória SQLite e as lições da V0.1 são mantidos, mas o novo modelo neuronal começa do zero.
-- Esta versão **não mantém o painel web/Ollama anterior nem altera automaticamente serviços systemd**. O serviço da antiga plataforma pode ainda estar instalado no servidor. Faz backup e revê o serviço antes da migração para CLI.
-- O ambiente de teste com PyTorch não equivale a um runtime embebido final em C++. Numa VM com 2 GB RAM e 1 vCPU, o modo `tiny` é o primeiro a testar, mas o consumo real depende da distribuição e da instalação do PyTorch.
+```text
+nord_brain/
+  core.py          # Transformer, gradientes, avaliação e MLP expansível
+  runtime.py       # Conversa, ensino, memória, acesso controlado ao modelo
+  conversation.py  # Reconhecimento transparente de padrões em português
+  autonomy.py      # Ciclo autónomo, experiências e ensaios de crescimento
+  experiments.py   # Exercícios verificáveis com conjuntos de teste distintos
+  storage.py       # Memória, lições, testes, eventos, estados da autonomia
+  vocabulary.py    # Sementes lexicais iniciais (não pré-treinam)
+  internet.py      # Pesquisa opcional com fonte
+  cli.py           # Terminal conversacional
+```
 
-## Testes
+A memória anterior e o checkpoint V0.2 continuam compatíveis. A principal interface passou a ser conversa, mas `/ajuda`, `/cerebro`, `/avaliar` e `/sair` continuam disponíveis como comandos de diagnóstico. O serviço web antigo não foi restabelecido.
+
+## Verificar
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Consulta o histórico Git para recuperar a versão anterior da plataforma, se necessário.
+Os testes cobrem causalidade, pesos alterados e persistidos, frases naturais de ensino e correção, janela de treino longa, treino autónomo em thread, separação de treino/teste e decisão reversível de crescimento. **Estes são testes de implementação, não provas de inteligência**.
+
+### Limites reais
+
+- Começar com pesos aleatórios exige **muitos dados, esforço computacional e aprendizagem validada** antes de se obter boa linguagem. Um vocabulário não substitui o pré-treino.
+- Autonomia é limitada a ações e verificadores implementados, e a leitura da Internet não ensina automaticamente os pesos.
+- O crescimento é condicionado a **plateau, testes separados e ganho sobre um controlo sem crescimento**, além de limites de memória; pode nunca ser aprovado, o que é desejável se não houver benefício.
+- Este programa não gere sozinho o hardware nem é um cérebro comparável ao de uma pessoa. Não corre integralmente num microcontrolador.
