@@ -37,6 +37,44 @@ class DialogueTests(unittest.TestCase):
                 self.assertEqual(b.dialogue.latest()['focus'],'story')
             finally:b.close()
 
+    def test_user_transcript_extenso_and_consegues_maior_use_story_context(self):
+        with tempfile.TemporaryDirectory() as root,patch.dict('os.environ',{'NORD_LLM':'off'}):
+            b=self.brain(root)
+            try:
+                steps=b.core.steps
+                first,_=b.chat('conta-me uma historia')
+                name=first.split('\n\n',1)[1].split(',',1)[0]
+                second,_=b.chat('faz mais extenso')
+                third,_=b.chat('consegues fazer maior')
+                self.assertGreater(len(second),len(first))
+                self.assertGreater(len(third),len(second))
+                self.assertIn(name,second)
+                self.assertIn(name,third)
+                self.assertFalse(b.awaiting_explanation)
+                self.assertIsNone(b.last_question)
+                self.assertIsNone(b.memory.exact('consegues fazer maior'))
+                self.assertEqual(b.core.steps,steps)
+            finally:b.close()
+
+    def test_character_question_then_story_expansion_uses_full_story(self):
+        with tempfile.TemporaryDirectory() as root,patch.dict('os.environ',{'NORD_LLM':'off'}):
+            b=self.brain(root)
+            try:
+                first,_=b.chat('conta-me uma historia')
+                who,_=b.chat('qual era o nome da personagem?')
+                self.assertLess(len(who),len(first))
+                expanded,_=b.chat('faz mais extenso')
+                self.assertGreater(len(expanded),len(first))
+                self.assertIn(first.split('\n\n',1)[1].split(',',1)[0],expanded)
+            finally:b.close()
+
+    def test_continuation_command_is_not_an_automatic_teacher_label(self):
+        from nord_brain.conversation import interpret
+        for message in ('faz mais extenso','consegues fazer maior',
+                        'e o que achas disso?','consegues explicar melhor'):
+            intent=interpret(message,'Pergunta antiga?',True)
+            self.assertNotIn(intent.kind,('explanation','correction','teach','fact'),message)
+
     def test_continue_rewrite_and_other_story_followups(self):
         with tempfile.TemporaryDirectory() as root,patch.dict('os.environ',{'NORD_LLM':'off'}):
             b=self.brain(root)

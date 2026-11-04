@@ -1,6 +1,25 @@
-# Nord Brain V1.7 — contexto contínuo para toda a conversa
+# Nord Brain V1.8 — contexto conversacional por assunto
 
-A Nord Brain mantém agora **um contexto local e limitado das 24 últimas interações** (`~/.nord-brain/dialogue.sqlite3`), separado de `memory.sqlite3` e dos pesos neuronais. Não é um novo modelo pré-treinado: é memória operacional para interpretar referências a mensagens anteriores.
+A memória de conversa é partilhada por **todos os módulos**. A Nord Brain mantém até **480 interações locais** em `~/.nord-brain/dialogue.sqlite3`, recuperando as **oito interações recentes** e até **três interações antigas relevantes** para cada nova mensagem ao chamar o modelo local. A recuperação é lexical e leve para CPU, não equivale a compreensão semântica perfeita.
+
+```text
+tu> conta-me uma história
+nord> [história sobre Nuno e uma máquina misteriosa]
+tu> faz mais extenso
+nord> [a mesma história, desenvolvida]
+tu> quem era ele?
+nord> [responde usando a personagem da história]
+tu> consegues fazer maior
+nord> [recupera a história completa, não a resposta curta anterior]
+```
+
+Também funciona para projetos, problemas e investigações: quando voltas a mencionar um assunto antigo, o histórico relevante pode ser recuperado mesmo depois de outras conversas e de reiniciar a Nord Brain. O modelo pré-treinado local continua a ser necessário para interpretação livre, reformulações e respostas naturais; o pequeno Transformer experimental não herda essa capacidade só por receber memória.
+
+Pedidos de continuação e reformulação nunca são exemplos de treino automático, mesmo quando existia uma pergunta sem resposta pendente. Usa `/contexto` para o último assunto e `/limpar-contexto` para apagar apenas esta memória. As lições ensinadas, livros e checkpoints não são alterados pela limpeza.
+
+## Histórico V1.7 — contexto contínuo para toda a conversa
+
+A V1.7 mantinha **um contexto local e limitado das 24 últimas interações** (`~/.nord-brain/dialogue.sqlite3`), separado de `memory.sqlite3` e dos pesos neuronais. Não é um novo modelo pré-treinado: é memória operacional para interpretar referências a mensagens anteriores.
 
 ```text
 tu> conta-me uma história
@@ -31,7 +50,7 @@ Atualiza com `git pull origin main` e inicia com `./nord`. Os testes incluem a r
 ## Conversa geral contínua (V1.7)
 
 - **Todos os módulos contam**: depois de uma conta, pesquisa, simulação, livro ou conversa casual, o texto da interação fica em `dialogue.sqlite3`, separado de `memory.sqlite3` e de qualquer treino neuronal.
-- **Mesmo depois de reiniciar**, o modelo local recebe até **cinco interações anteriores** como mensagens `user`/`assistant` na API de conversação, com texto abreviado para poupar RAM/contexto. A base SQLite conserva até 24 interações.
+- **Mesmo depois de reiniciar**, na V1.7, o modelo local recebia até **cinco interações anteriores** como mensagens `user`/`assistant` na API de conversação, com texto abreviado para poupar RAM/contexto. A versão V1.8 conserva até 480 interações e seleciona as relevantes.
 - **Referências e continuidade**: «o que achas disso?», «e ele?», «quem é ele?», «explica melhor», «resume isso», «faz uma mais longa» e «continua» utilizam o assunto anterior em vez de ensinar falsas respostas.
 - **Assunto ativo**: perguntas relacionadas herdam o assunto inicial; uma pergunta independente passa a ser o novo assunto. O histórico do Qwen não é uma memória paralela e volátil: usa o mesmo registo de diálogo da Nord Brain.
 - **Sem Qwen pré-treinado**: a Nord Brain ainda identifica o assunto anterior e consegue fazer certas revisões procedurais de histórias, mas **não** consegue garantir explicações e conversas livres. Um histórico não dá fluência a um Transformer treinado do zero.

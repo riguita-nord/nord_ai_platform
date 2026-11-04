@@ -262,6 +262,11 @@ class Brain:
             result = None
             if previous and kind is not None:
                 result = self._contextual_reply(message, kind, previous)
+                if result is not None:
+                    # A continuation or discussion request is never a lesson
+                    # answering an earlier unresolved question.
+                    self.awaiting_explanation=False
+                    self.last_question=None
             if result is None:
                 result = self._chat_impl(message)
             reply, origin = result
@@ -330,6 +335,10 @@ class Brain:
                             f'(versão revista)\n\n{output["body"]}\n\n'
                             'A alteração ficou guardada no livro.'), 'livro persistente; capítulo revisto'
         if focus == 'story' and kind in ('longer','rewrite','ending','continue'):
+            # A follow-up about a character may have been the last reply; find
+            # the most recent full narrative instead of expanding that answer.
+            story_turn=self.dialogue.latest_story()
+            source_story=story_turn['reply'] if story_turn is not None else previous['reply']
             instructions = {
                 'longer': 'Reescreve a MESMA história numa versão significativamente mais longa, '
                           'com novas cenas, diálogos, desenvolvimento e detalhes. Preserva '
@@ -343,12 +352,12 @@ class Brain:
             }
             prompt = (instructions[kind]+' Responde em português europeu, em prosa. '
                       'Este texto é ficção, não informação factual.\n'
-                      'HISTÓRIA ANTERIOR:\n'+previous['reply'][:5600])
+                      'HISTÓRIA ANTERIOR:\n'+source_story[:5600])
             output = self.language.generate(prompt, creative=True, max_tokens=1200,
                                             remember=False)
             if (not output or (kind == 'longer'
-                               and len(output.strip()) < len(previous['reply'])*1.25)):
-                output = revise_story(previous['reply'],kind)
+                               and len(output.strip()) < len(source_story)*1.25)):
+                output = revise_story(source_story,kind)
                 return output, 'ficção contextual procedural (sem modelo pré-treinado)'
             return output, 'ficção contextual gerada pelo modelo linguístico local'
         if kind in ('explain','discuss','reference','shorter','longer','rewrite','continue'):

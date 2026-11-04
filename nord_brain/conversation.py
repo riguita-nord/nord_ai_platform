@@ -283,6 +283,12 @@ def interpret(message: str, last_question: str | None = None, awaiting_explanati
     fact=_fact(text)
     if fact:
         return fact
+    # A request to revise, continue or discuss the conversation is never a
+    # teacher's answer, even if the brain previously asked for an explanation.
+    # Keep this independent of the history router for first-turn requests.
+    from .dialogue import followup_kind
+    if followup_kind(text) is not None:
+        return Intent('question', text)
     if awaiting_explanation and last_question and not text.endswith('?'):
         # Long, unstructured feedback is not automatically a correct answer.
         # Ask for a clear response rather than poisoning long-term memory.
