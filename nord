@@ -5,7 +5,7 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
 if [[ ! -x "$ROOT/.venv/bin/python" ]] || \
-   ! "$ROOT/.venv/bin/python" -c 'import torch, pip' >/dev/null 2>&1; then
+   ! "$ROOT/.venv/bin/python" -c 'import numpy, torch, pip' >/dev/null 2>&1; then
   bash "$ROOT/install.sh" --install-only
 fi
 

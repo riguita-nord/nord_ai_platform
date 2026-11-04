@@ -110,6 +110,10 @@ if ! "$VENV_PY" -c 'import torch; assert tuple(int(p) for p in torch.__version__
     "$VENV_PY" -m pip install -r "$ROOT/requirements.txt"
   fi
 fi
+if ! "$VENV_PY" -c 'import numpy as np; v=tuple(map(int,np.__version__.split(".")[:2])); assert (1,24)<=v<(3,0)' >/dev/null 2>&1; then
+  printf '[Nord Brain] A instalar NumPy (dependência necessária para PyTorch)...\n'
+  "$VENV_PY" -m pip install 'numpy>=1.24,<3'
+fi
 printf '\n[Nord Brain] Dependências prontas.\n'
 if ((INSTALL_ONLY)); then
   printf 'Para iniciar: %s/nord\n' "$ROOT"
