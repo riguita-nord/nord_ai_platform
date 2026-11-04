@@ -77,6 +77,31 @@ class BrainTheoryTests(unittest.TestCase):
             finally:
                 b.close()
 
+    def test_review_mode_cannot_be_bypassed_by_other_automatic_math_trainers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            b=self.make_brain(tmp)
+            try:
+                b.chat('2+2 é 4')
+                # First train an old automatic math example, then switch to review.
+                b.memory.teach('Quanto é 6 + 2?', '8', origin='verified_experiment')
+                b.chat('quero aprovar as hipóteses')
+                agent=Autonomy(b,AutoSettings(training=True,experiments=True,
+                    world_simulations=False,cognitive_lab=True,cognitive_tasks_per_tick=3,
+                    hypotheses_per_tick=5,growth=False,research=False))
+                before=b.core.steps
+                for _ in range(4):agent.tick()
+                # Teacher lessons may still replay, but no automatic math.
+                rows=b.memory.db.execute("""SELECT origin,COUNT(*) FROM lessons
+                  WHERE origin IN ('verified_experiment','cognitive_matematica',
+                                   'cognitive_padroes','verified_math_hypothesis')
+                  GROUP BY origin""").fetchall()
+                self.assertEqual(dict(rows).get('verified_experiment'),1)
+                self.assertNotIn('cognitive_matematica',dict(rows))
+                self.assertNotIn('cognitive_padroes',dict(rows))
+                self.assertNotIn('verified_math_hypothesis',dict(rows))
+                self.assertTrue(b.core.steps>=before)
+            finally:b.close()
+
     def test_rejection_blocks_replay_and_future_training(self):
         with tempfile.TemporaryDirectory() as tmp:
             b=self.make_brain(tmp)

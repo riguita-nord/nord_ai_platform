@@ -147,7 +147,9 @@ class Autonomy:
                 brain.memory.event('world_training',
                     f"scenarios={result['scenarios']}; observations={result['observations']}",
                     result['after']['joint_loss'])
-            if settings.experiments:
+            # Review mode must not be bypassed by the automatic arithmetic
+            # curriculum; otherwise rejected theories would train elsewhere.
+            if settings.experiments and not brain.memory.review_required():
                 level=max(0,min(MAX_LEVEL,int(brain.memory.get_meta('math_level','0'))))
                 training, heldout=curriculum(level)
                 # Evaluation tasks are frozen, untrained, and excluded from replay.
@@ -216,6 +218,8 @@ class Autonomy:
                 rotation=('padroes','linguagem','logica','matematica')
                 for offset in range(settings.cognitive_tasks_per_tick):
                     domain=rotation[(self._ticks-1+offset)%len(rotation)]
+                    if brain.memory.review_required() and domain in ('matematica','padroes'):
+                        continue
                     result=brain.cognition.trial(domain)
                     if result.get('status')=='treinado':
                         brain.memory.event('cognitive_training',
@@ -227,7 +231,7 @@ class Autonomy:
                         brain.cognition.evaluate(domain,limit=2)
             # Replay is also learning: old examples are reintroduced without an
             # extra teacher command. Keep CPU use small on 1-vCPU machines.
-            recent=brain.memory.lessons(8)
+            recent=brain.memory.lessons(8, review_math=brain.memory.review_required())
             if recent:
                 q,a=recent[self._ticks%len(recent)]
                 brain.core.save()

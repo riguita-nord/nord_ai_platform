@@ -29,7 +29,7 @@ tu> retoma aprendizagem
 nord> Reativei as experiências e o treino autónomo.
 ```
 
-O modo de revisão de hipóteses matemáticas é **opcional**; por defeito, as hipóteses aritméticas verificadas treinam autonomamente. A pausa aplica-se a todas as atualizações autónomas, incluindo o simulador de movimento e a investigação. As instruções explícitas do professor continuam a poder ensinar mesmo com a autonomia pausada. O modo de revisão não bloqueia automaticamente o currículo autónomo de outras áreas; usa `pausa aprendizagem` para parar todo esse treino.
+O modo de revisão de hipóteses matemáticas é **opcional**; por defeito, as hipóteses aritméticas verificadas treinam autonomamente. Ao ativá-lo, também são suspensos o currículo automático de contas, o treino automático de padrões numéricos e a revisão dos exemplos matemáticos automáticos anteriores; só hipóteses que aprovares podem avançar pelo laboratório de hipóteses. A pausa aplica-se a todas as atualizações autónomas, incluindo o simulador de movimento e a investigação. As instruções explícitas do professor continuam a poder ensinar mesmo com a autonomia pausada. O modo de revisão não bloqueia automaticamente lógica, linguagem nem simulações do mundo virtual; usa `pausa aprendizagem` para parar todo esse treino.
 
 Se disseres `3+2 é 8`, a conta é recusada pelo verificador; `3+2 é 5` é aceite. **Rejeitar uma hipótese depois de já ter sido treinada bloqueia experiências futuras, mas não desfaz os pesos anteriormente modificados.** A fila, as decisões do professor e os bloqueios sobrevivem ao reinício da aplicação.
 

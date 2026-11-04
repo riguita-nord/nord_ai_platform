@@ -328,8 +328,13 @@ class Memory:
     def lesson_count(self):
         return self.db.execute("SELECT COUNT(*) FROM lessons WHERE origin NOT LIKE 'legacy_%'").fetchone()[0]
 
-    def lessons(self, limit=100):
-        return self.db.execute("SELECT question,answer FROM lessons WHERE origin NOT LIKE 'legacy_%' AND question NOT IN (SELECT question FROM training_blocks) ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    def lessons(self, limit=100, review_math=False):
+        sql = "SELECT question,answer FROM lessons WHERE origin NOT LIKE 'legacy_%' AND question NOT IN (SELECT question FROM training_blocks)"
+        if review_math:
+            # Mathematically verified automatic samples created before the
+            # review switch must not bypass future teacher approval via replay.
+            sql += " AND origin NOT IN ('verified_experiment','verified_math_hypothesis','cognitive_matematica','cognitive_padroes')"
+        return self.db.execute(sql + ' ORDER BY id DESC LIMIT ?', (limit,)).fetchall()
 
     def concept(self, term: str, definition: str, origin='teacher'):
         term,definition=term.strip().lower(),definition.strip()
