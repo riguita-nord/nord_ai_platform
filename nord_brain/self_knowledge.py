@@ -6,7 +6,7 @@ come from program capabilities and persisted records, not neural awareness.
 from __future__ import annotations
 
 
-def report(memory, core, *, internet_enabled: bool = False) -> str:
+def report(memory, core, *, internet_enabled: bool = False, local_language_status: str | None = None) -> str:
     skills = [
         'guardar e recuperar conhecimentos que me ensinas;',
         'resolver algumas contas e deduções simples com verificadores;',
@@ -14,8 +14,8 @@ def report(memory, core, *, internet_enabled: bool = False) -> str:
         'simular ações alternativas numa máquina virtual e aprender a prever consequências;',
         'experimentar crescimento neuronal, condicionado a testes;',
     ]
-    skills.append('consultar fontes oficiais selecionadas e treinar com excertos identificados, quando a Internet está ativa.' if internet_enabled
-                  else 'pesquisar fontes oficiais selecionadas se a Internet for ativada.')
+    skills.append('pesquisar fontes públicas identificadas sem as treinar antes da tua confirmação.' if internet_enabled
+                  else 'pesquisar fontes públicas quando a Internet for ativada.')
     hypothesis_stats=memory.hypothesis_stats()
     hypothesis_text=(f'Hipóteses matemáticas: {hypothesis_stats.get("pending",0)} por testar, '
                      f'{hypothesis_stats.get("trained",0)} verificadas e treinadas, '
@@ -43,7 +43,10 @@ def report(memory, core, *, internet_enabled: bool = False) -> str:
         (f'Estado: {memory.teacher_lesson_count()} exemplos ensinados por ti, '
          f'{memory.reasoning_fact_count()} relações guardadas e '
          f'{core.steps} passos de treino neuronal.'),
-        'Limite: ainda não compreendo português livremente. Lembrar factos ou fazer uma dedução simbólica não prova compreensão neuronal.',
+        ('Limite: tenho um modelo linguístico pré-treinado local ligado para gerar português, '
+         'mas os seus pesos não são os do meu Transformer experimental; '
+         'a aprendizagem deste continua a exigir avaliação.' if local_language_status=='servidor local encontrado' else
+         'Limite: ainda não compreendo português livremente. Lembrar factos ou fazer uma dedução simbólica não prova compreensão neuronal.'),
     ]
     return '\n'.join(lines)
 
@@ -70,10 +73,11 @@ def respond(brain, kind: str) -> str:
                     f'{core.parameter_count} parâmetros e {config.layers} camadas. '
                     'As minhas respostas combinam treino neuronal, memória local e '
                     'verificadores especializados; isto não é autoconsciência.\n')
-        return overview + report(memory, core, internet_enabled=internet_enabled)
+        return overview + report(memory, core, internet_enabled=internet_enabled,
+                                 local_language_status=brain.language.status())
     if kind == 'identity':
         return (f'Sou a Nord Brain, versão {__version__}: uma IA experimental '
-                'baseada num Transformer próprio, sem pesos pré-treinados. '
+                'baseada num Transformer próprio, sem pesos pré-treinados nesse núcleo. '
                 'Respondo no terminal e aprendo com exemplos. Não sou uma pessoa.')
     if kind == 'creator':
         return ('Sou um projeto da Nord Lab. O meu código é desenvolvido e '

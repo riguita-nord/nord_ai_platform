@@ -91,10 +91,10 @@ class RuntimeTests(unittest.TestCase):
                 self.assertIn('Britannica',result)
                 b.chat('confirma fonte 1')
                 self.assertIsNotNone(b.memory.lookup_concept('Elon Musk'))
-                # After review, language lab can generate candidate questions.
-                case=b.cognition.candidate('linguagem')
-                self.assertIsNotNone(case)
-                self.assertIn('elon musk',case.question.lower())
+                # Confirmed web research is sourced, not equivalent to an
+                # independently taught teacher concept in the reasoning lab.
+                self.assertIsNone(b.cognition.candidate('linguagem'))
+                self.assertEqual(b.memory.lookup_concept('Elon Musk'), SOURCES[0]['summary'])
             finally:b.close()
 
     def test_math_is_not_a_conversation_error(self):

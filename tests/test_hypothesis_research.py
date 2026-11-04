@@ -79,14 +79,14 @@ class OfficialResearchTests(unittest.TestCase):
                     steps=brain.core.steps
                     response,_=brain.chat('pesquisa sobre Python')
                     self.assertIn('Fonte oficial',response)
-                    self.assertGreater(brain.core.steps,steps)
-                    self.assertEqual(brain.memory.source_count(),1)
+                    self.assertEqual(brain.core.steps,steps)
+                    self.assertEqual(brain.memory.source_count(),0)
                     steps=brain.core.steps
                     brain.chat('pesquisa sobre Python')
                     self.assertEqual(brain.core.steps,steps)
             finally: brain.close()
             again=Brain(Path(d),start_autonomy=False)
-            try:self.assertEqual(again.memory.source_count(),1)
+            try:self.assertEqual(again.memory.source_count(),0)
             finally:again.close()
 
     def test_autonomy_research_trains_source_but_not_random_web_text(self):
@@ -101,8 +101,8 @@ class OfficialResearchTests(unittest.TestCase):
                 agent._ticks=2
                 with patch('nord_brain.autonomy.search',return_value=[article]):
                     agent.tick()
-                self.assertEqual(brain.memory.source_count(),1)
-                self.assertGreater(brain.core.steps,0)
+                self.assertEqual(brain.memory.source_count(),0)
+                self.assertEqual(brain.core.steps,0)
                 self.assertEqual(brain.memory.teacher_lesson_count(),0)
             finally:brain.close()
 

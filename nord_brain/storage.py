@@ -103,28 +103,6 @@ class Memory:
             question TEXT PRIMARY KEY, reason TEXT NOT NULL, created INTEGER NOT NULL
         );
         """)
-        # Older dialogue versions accidentally trained on paraphrases as
-        # literal answers. Preserve those rows, but exclude them from replay
-        # and exact-match answers, instead of deleting the user's memory.
-        from .conversation import self_query_kind, normalize_request
-        candidate_rows=self.db.execute(
-            "SELECT id,question,answer FROM lessons WHERE origin='teacher'"
-        ).fetchall()
-        misparsed=[]
-        for item_id,question,answer in candidate_rows:
-            if not self_query_kind(question):
-                continue
-            normal=normalize_request(answer)
-            if (self_query_kind(answer) or
-                    (normal.startswith('quando ') and 'quero que' in normal) or
-                    ('mesmo que te disser' in normal)):
-                misparsed.append((item_id,))
-        if misparsed:
-            with self.db:
-                self.db.executemany(
-                    "UPDATE lessons SET origin='legacy_self_paraphrase' WHERE id=?",
-                    misparsed,
-                )
         self.db.commit()
 
     def training_paused(self):
@@ -341,7 +319,7 @@ class Memory:
     def exact(self, question: str):
         if self.is_training_blocked(question):
             return None
-        row=self.db.execute("SELECT answer FROM lessons WHERE lower(question)=lower(?) AND origin NOT LIKE 'legacy_%' ORDER BY id DESC LIMIT 1",(question.strip(),)).fetchone()
+        row=self.db.execute("SELECT answer FROM lessons WHERE lower(question)=lower(?) AND origin NOT LIKE 'legacy_%' ORDER BY CASE WHEN origin='teacher' THEN 0 WHEN origin='teacher_confirmed_research' THEN 1 ELSE 2 END, id DESC LIMIT 1",(question.strip(),)).fetchone()
         return row[0] if row else None
 
     def is_holdout(self, question: str) -> bool:
@@ -351,7 +329,7 @@ class Memory:
         return self.db.execute("SELECT COUNT(*) FROM lessons WHERE origin NOT LIKE 'legacy_%'").fetchone()[0]
 
     def lessons(self, limit=100, review_math=False):
-        sql = "SELECT question,answer FROM lessons WHERE origin NOT LIKE 'legacy_%' AND question NOT IN (SELECT question FROM training_blocks)"
+        sql = "SELECT question,answer FROM lessons WHERE origin NOT LIKE 'legacy_%' AND origin!='official_primary_excerpt' AND question NOT IN (SELECT question FROM training_blocks)"
         if review_math:
             # Mathematically verified automatic samples created before the
             # review switch must not bypass future teacher approval via replay.
@@ -363,6 +341,11 @@ class Memory:
         if not 1 <= len(term) <= 60 or not 1 <= len(definition) <= 350:
             raise ValueError('Conceito demasiado longo ou vazio')
         with self.db:
+            # Source claims must never silently replace an explicitly taught
+            # concept. A subsequent direct correction by the teacher may.
+            current=self.db.execute('SELECT origin FROM concepts WHERE term=?',(term,)).fetchone()
+            if current and current[0]=='teacher' and origin!='teacher':
+                return
             self.db.execute('INSERT INTO concepts VALUES(?,?,?,?) ON CONFLICT(term) DO UPDATE SET description=excluded.description,origin=excluded.origin,created=excluded.created',
                             (term,definition,origin,int(time.time())))
 

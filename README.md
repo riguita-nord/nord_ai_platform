@@ -1,15 +1,57 @@
+# Nord Brain v1.5 — histórias, conversa em português e diagnóstico de pesquisa
+
+Esta atualização corrige o bloqueio de pedidos criativos e a falta de variedade nas saudações e acrescenta uma segunda pesquisa sem chave. **O Transformer original da Nord Brain continua experimental** e não se transforma num modelo fluente só porque a perda diminuiu. Para conversa e escrita realmente naturais, a V1.5 pode usar **um modelo Qwen3-0.6B quantizado localmente em CPU**, mantendo o cérebro próprio, a memória e os seus pesos separados.
+
+## Como testar já, mesmo sem Qwen
+
+```bash
+cd ~/nord_ai_platform
+git pull origin main
+./nord
+```
+
+Na conversa: `ola`, `ola`, `ola` (saudações variadas), `conta-me uma história`, `inventa um conto sobre robôs`, `dá-me ideias para um livro`, `2+2` e `quem é Elon Musk?`. Sem modelo pré-treinado, as histórias e ideias são uma **composição procedural simples**, nunca inteligência criativa equivalente a Qwen. O pedido deixa de ser tratado como resposta de treino. A aritmética continua verificada e o ensino humano tem prioridade na memória.
+
+## Português e histórias com um modelo pré-treinado na CPU
+
+Numa segunda janela de terminal, **por tua iniciativa**, executa:
+
+```bash
+cd ~/nord_ai_platform
+bash scripts/start-local-language.sh
+```
+
+O script descarrega `unsloth/Qwen3-0.6B-GGUF/Qwen3-0.6B-Q4_K_M.gguf` (~397 MB, Apache-2.0), verifica o SHA-256, encontra ou compila `llama-server` (precisas de `git`, `cmake`, `c++` e `curl`) e abre **apenas em `127.0.0.1:8081`** com CPU (`-ngl 0`). A instalação e o download não acontecem silenciosamente durante `./nord`. O compilador pode precisar de pacotes como `build-essential` e `cmake`; num Pi com 2 GB de RAM o desempenho e a simultaneidade com PyTorch podem ser limitados. Idealmente usa um Pi com 8 GB ou mais.
+
+Na primeira janela:
+
+```bash
+cd ~/nord_ai_platform
+NORD_SHOW_ORIGIN=on ./nord
+```
+
+O cliente usa automaticamente um serviço **local** compatível com `POST /v1/chat/completions` se existir. Conversas e histórias passam pelo Qwen local quando disponível; respostas baseadas em conhecimento ensinado e cálculos verificados mantêm prioridade. O histórico curto enviado ao Qwen serve apenas para continuidade da conversa, **não atualiza os pesos**. Os pesos do Transformer Nord continuam a ser treinados e avaliados separadamente.
+
+Para verificar se o Qwen está ligado escreve `/diagnostico-linguagem`. `NORD_LLM=off ./nord` força o modo experimental sem o modelo pré-treinado. `NORD_LLM_URL` só aceita endpoints HTTP em loopback local e nunca envia automaticamente conversa para um servidor remoto.
+
+## Pesquisa com causas de falha visíveis
+
+A pesquisa agora tenta a fonte primária selecionada, a Brave Search API se a chave `NORD_BRAVE_API_KEY` estiver configurada, a página HTML do DuckDuckGo e, por fim, o RSS público do Bing. As duas últimas vias são **não oficiais e podem ser bloqueadas**; não é possível prometer resultados sem uma API contratada.
+
+```text
+/diagnostico-pesquisa
+/diagnostico-pesquisa Elon Musk
+```
+
+O diagnóstico indica quantos resultados úteis cada fornecedor devolveu ou que tipo de erro ocorreu. Se quiseres usar a API oficial, configura `NORD_BRAVE_API_KEY` no teu ambiente. Todas as fontes externas são guardadas como evidências provisórias: **nem mesmo documentação oficial entra automaticamente nos pesos**. Só uma confirmação tua permite usar o excerto para treino. Um conhecimento explicitamente ensinado por ti prevalece sobre um excerto externo mais recente, e uma contradição é assinalada em vez de ser substituída silenciosamente.
+
+**Limitações honestas:** não se demonstrou fluência do Transformer criado do zero; a criatividade fluente do Qwen provém dos pesos pré-treinados desse modelo separado. Este lançamento não implementa treino LoRA do Qwen em Raspberry Pi, navegação web garantida nem um navegador completo que faça pesquisa aberta em segundo plano. Pesquisa factual falhada não é substituída por palpites do modelo.
+
+---
+
 # Nord Brain V1.2 — pesquisa pública com fontes e aprendizagem textual controlada
 
 A Nord Brain mantém o Transformer experimental próprio, a matemática verificável e o laboratório de hipóteses da V1.1. **O modelo de texto continua sem pré-treino equivalente ao Qwen**, por isso é perigoso tratar palavras aleatórias como respostas. A V1.2 passa a distinguir perguntas públicas de texto ensinável e a apresentar fontes quando não tem conhecimento fundamentado.
-
-
-## Autoconhecimento e introspeção local
-
-A Nord Brain responde a perguntas naturais sobre **ela própria**: identidade, criadores do projeto, versão instalada, modelo/arquitetura, parâmetros, camadas, memória, aprendizagens, modo de treino, Internet, simulações e limitações. Exemplos: `Quem és tu?`, `Como funcionas?`, `Quantos parâmetros tens?`, `O que tens na memória?`, `Tens Internet?`, `Qual é a tua versão?`, `O que não sabes?`.
-
-As respostas usam **informações reais do programa em execução**, como `__version__`, parâmetros e configuração do Transformer, dados SQLite e estados do treino. Uma pergunta sobre si própria **não desencadeia treino automático**, não consulta a Internet desnecessariamente e não substitui respostas a perguntas sobre terceiros. O sistema distingue `O que sabes sobre ti?` de `O que sabes sobre Python?`.
-
-Este é um **relatório programático**, não consciência, compreensão livre da linguagem nem acesso privilegiado a pensamentos do modelo. Quando a Nord Brain não tem um dado verificável (por exemplo, a data exata em que foi criada), deve dizê-lo claramente. A deteção de intenções ainda é restrita; formulações não reconhecidas poderão exigir melhorias futuras.
 
 ## Resolver as perguntas do terminal
 
@@ -355,46 +397,3 @@ Os testes cobrem também inferência em várias etapas, hipóteses temporárias,
 - Autonomia é limitada a ações e verificadores implementados. Pequenos excertos de documentação primária podem treinar os pesos (desativável), mas sem prova independente de veracidade.
 - O crescimento é condicionado a **plateau, testes separados e ganho sobre um controlo sem crescimento**, além de limites de memória; pode nunca ser aprovado, o que é desejável se não houver benefício.
 - Este programa não gere sozinho o hardware nem é um cérebro comparável ao de uma pessoa. Não corre integralmente num microcontrolador.
-
----
-
-## Treino neuronal de português em CPU (experimental)
-
-Este módulo altera **os pesos do Transformer próprio da Nord Brain**, sem acrescentar
-um texto de instruções ao contexto das conversas. Inclui um pequeno currículo
-supervisionado sobre conversação em português, criatividade, argumentos,
-opiniões versus factos, hipóteses e correções. As perguntas de avaliação são
-diferentes das perguntas de treino. Não utiliza conteúdos de sites como
-exemplos automáticos e não substitui o que o utilizador ensinou.
-
-Na VM, atualiza o projeto e inicia como habitualmente:
-
-```bash
-cd ~/nord_ai_platform
-git pull origin main
-./nord
-```
-
-Dentro do terminal da Nord Brain:
-
-```text
-/avaliar-portugues
-/treinar-portugues 20
-/avaliar-portugues
-```
-
-- O comando aceita de 1 a 100 exemplos por sessão. A perda é medida sobre
-  frases reservadas, sem fornecer as respostas ao treino.
-- Uma melhoria de perda não significa que a Nord Brain saiba falar português
-  fluentemente; avalia-se apenas a previsão de tokens. O modelo continua sem
-  os pesos pré-treinados do Qwen.
-- O treino autónomo de português é permitido por defeito, mas faz apenas um
-  exemplo de três em três ciclos, até três passagens pelo currículo; não repete
-  indefinidamente estes exemplos. `NORD_PORTUGUESE_TRAIN=off ./nord` desliga-o.
-- Respeita `pausa aprendizagem`. Se a avaliação em português piorar mais de
-  5%, ou se degradar excessivamente exemplos previamente ensinados pelo
-  utilizador e testes existentes, o checkpoint anterior é restaurado.
-- Os ficheiros `brain-v2.pt` e `memory.sqlite3` existentes são preservados.
-  Este treino não instala Qwen, não exige GPU e não promete inteligência geral.
-
-Para conferir os testes: `.venv/bin/python -m unittest discover -s tests -v`.

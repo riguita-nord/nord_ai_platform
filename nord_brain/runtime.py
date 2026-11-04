@@ -23,6 +23,8 @@ from .reasoning import ReasoningEngine, parse_fact
 from .world import WorldMind
 from .theory_control import route_control
 from .cognition import CognitiveLab
+from .creative import creative_request, story
+from .language_backend import LocalLanguage
 
 
 class Brain:
@@ -46,6 +48,8 @@ class Brain:
         # Its weights are trained from transitions, never injected via chat context.
         self.world=WorldMind(self.data_dir/'world-model-v1.pt')
         self.cognition=CognitiveLab(self)
+        self.language=LocalLanguage()
+        self._greeting_index=-1
         self.last_question=None
         self.last_research=None
         self.awaiting_explanation=False
@@ -103,33 +107,16 @@ class Brain:
         return None
 
     def absorb_official_sources(self, topic, results):
-        """Train on short *attributed* primary-source extracts, not arbitrary pages.
+        """Archive public evidence only; never promote a webpage to teacher truth.
 
-        Official publisher identity is provenance, NOT fact verification.
-        An independent site review or additional evidence is still required
-        before treating its content as a scientific truth.
+        Even official publications can be incomplete, outdated or unsuitable.
+        Human-approved knowledge outranks external discovery.
         """
-        trained=0
-        for item in results[:1]:
-            url=item.get('url','')
-            self.memory.observation(topic,item['title'],url,item['summary'])
-            if (item.get('source_tier')!='official_primary' or
-                    url not in {entry[1] for entry in OFFICIAL} or
-                    os.getenv('NORD_SOURCE_TRAIN','on').lower() in ('off','0','false','no') or
-                    self.memory.source_was_learned(url)):
-                continue
-            # Only a curated first-party page reaches this path. Strict size
-            # bounds and small windows protect CPU/RAM on the Raspberry Pi.
-            answer=item['summary'][:180].strip()
-            if len(answer)<35:continue
-            question=f'O que diz a documentação oficial sobre {topic[:65]}?'
-            if self.memory.is_holdout(question):continue
-            self._learn(question,answer,epochs=1,origin='official_primary_excerpt')
-            row=self.memory.db.execute("SELECT MAX(id) FROM lessons WHERE origin='official_primary_excerpt'").fetchone()
-            self.memory.mark_source_learned(url,topic,row[0])
-            self.memory.event('official_source_training',url)
-            trained+=1
-        return trained
+        for item in results[:3]:
+            if item.get('source_tier')=='official_primary':
+                self.memory.observation(topic,item.get('title',''),
+                                        item.get('url',''),item.get('summary',''))
+        return 0  # deliberately no automatic neural training from research
 
     def _research_public(self,topic: str, question: str):
         """Research is evidence discovery, not free-form neural generation.
@@ -148,7 +135,7 @@ class Brain:
             self.memory.unknown(topic)
             return ('Não encontrei fontes úteis sobre esse tema. A pesquisa pública pode estar indisponível '
                     'na rede, ou a fonte não apareceu nos resultados. Não vou inventar uma resposta. '
-                    'Podes ensinar-me um facto ou configurar NORD_BRAVE_API_KEY para pesquisa com API.'), 'pesquisa sem resultados'
+                    'Podes ensinar-me um facto ou executar /diagnostico-pesquisa para testar os fornecedores. Para maior fiabilidade, configura NORD_BRAVE_API_KEY.'), 'pesquisa sem resultados'
         # Preserve the former opt-in research pipeline for the four strictly
         # pinned official documentation pages. Broader search snippets are
         # NEVER admitted as autonomous neural labels without teacher review.
@@ -159,7 +146,7 @@ class Brain:
         self.last_research={'question':question,'topic':topic,'results':results}
         lines=[f'Encontrei estas informações sobre {topic} (ainda não confirmadas):']
         if results[0].get('source_tier')=='official_primary':
-            lines.append(f'Fonte oficial selecionada; exemplos treinados agora: {official_training}.')
+            lines.append('Fonte oficial encontrada; informação provisória, ainda sem treino.')
         for index,item in enumerate(results[:3],1):
             lines.append(f'[{index}] {item["title"]}: {item["summary"][:290]}')
             lines.append(f'    Fonte: {item["url"]}')
@@ -182,12 +169,19 @@ class Brain:
         # The user explicitly validates the selected excerpt. The content
         # is still attributed; train a real gradient update, NOT prompt context.
         question=record['question']
+        # An explicit teacher answer cannot be silently superseded by an
+        # extracted snippet, even when the user approves that snippet generally.
+        old=self.memory.db.execute('''SELECT answer FROM lessons WHERE lower(question)=lower(?)
+                       AND origin='teacher' ORDER BY id DESC LIMIT 1''',(question,)).fetchone()
+        if old and old[0].strip()!=answer:
+            return ('A fonte contradiz uma resposta que me ensinaste diretamente. '
+                    'Vou manter a tua resposta. Se quiseres alterá-la, corrige-a explicitamente.'), 'conflito com o professor'
         if self.memory.is_holdout(question) or self.memory.is_cognitive_probe(question):
             return ('Esta pergunta está reservada para avaliação, por isso não posso treiná-la.', 'teste protegido')
         self._learn(question,answer,epochs=1,origin='teacher_confirmed_research')
         topic=record['topic']
         if len(topic)<=60:
-            self.memory.concept(topic,answer[:300],origin='teacher')
+            self.memory.concept(topic,answer[:300],origin='teacher_confirmed_research')
         self.memory.event('research_confirmed',item['url'])
         self.last_research=None
         return (f'Confirmação registada. Atualizei os pesos com a informação que validaste sobre {topic}. '
@@ -235,7 +229,8 @@ class Brain:
                 if solved is not None:
                     return self._math_reply(solved)
                 if is_self_knowledge_request(question) or self.memory.resolve_intent_alias(question)=='self_knowledge':
-                    return self_knowledge_report(self.memory,self.core, internet_enabled=os.getenv('NORD_INTERNET','on').lower() not in ('off','0','false','no')), 'relatório local de capacidades e memória'
+                    return self_knowledge_report(self.memory,self.core, internet_enabled=os.getenv('NORD_INTERNET','on').lower() not in ('off','0','false','no'),
+                                                  local_language_status=self.language.status()), 'relatório local de capacidades e memória'
                 known=self.memory.exact(question)
                 if known is not None:
                     return known,'memória ensinada (não é generalização neuronal)'
@@ -254,6 +249,17 @@ class Brain:
                 self.awaiting_explanation=False
                 self.last_question=None
                 return control
+            # Creative requests are not questions awaiting teacher facts.
+            # Prefer pretrained local CPU inference; retain a clearly labelled
+            # procedural fallback if no local language model is installed.
+            creative_topic=creative_request(message)
+            if creative_topic is not None:
+                self.awaiting_explanation=False
+                self.last_question=None
+                response=self.language.generate(message,creative=True,max_tokens=650)
+                if response:
+                    return response,'linguagem pré-treinada local (llama.cpp); não é treino Nord'
+                return story(creative_topic),'composição narrativa procedural (sem modelo pré-treinado)'
             # First-person questions concern the actual running agent, not
             # numbers, web research, or another teacher answer.
             self_kind=self_query_kind(message)
@@ -329,7 +335,20 @@ class Brain:
                 return ('Quero aprender corretamente, mas não consegui identificar a resposta. '
                         'Podes dar um exemplo direto, como «2+2 é 4»?'), 'a aguardar explicação clara'
             if intent.kind=='empty':return 'Diz-me alguma coisa.','terminal'
-            if intent.kind=='greeting':return 'Olá! Estou a aprender. Podes ensinar-me algo ou fazer uma pergunta.','interface inicial'
+            if intent.kind=='greeting':
+                self.awaiting_explanation=False
+                self.last_question=None
+                response=self.language.generate(message,creative=True,max_tokens=80)
+                if response:return response,'linguagem pré-treinada local (llama.cpp)'
+                # Offline variation is interface behaviour, NOT evidence of
+                # fluency or spontaneous neural comprehension.
+                greetings=('Olá! Como estás hoje?',
+                           'Olá de novo! Tens alguma ideia que queiras explorar?',
+                           'Boas! O que te apetece descobrir?',
+                           'Ora viva! Queres conversar ou experimentar alguma coisa?',
+                           'Olá! Estou por aqui. Sobre o que queres falar?')
+                self._greeting_index=(self._greeting_index+1)%len(greetings)
+                return greetings[self._greeting_index],'saudação local (não neuronal)' 
             if intent.kind=='farewell':return 'Até à próxima! Vou guardar aquilo que aprendi.','interface inicial'
             if intent.kind=='progress':
                 s=self.status()
@@ -396,8 +415,14 @@ class Brain:
                 self.memory.unknown(intent.topic)
                 self.awaiting_explanation=True
                 return f'Ainda não sei o que é {intent.topic}. Podes explicar-me?', 'pergunta de aprendizagem'
-            # Normal question, no teacher answer assumed.
+            # Normal question, no teacher answer assumed. A local pretrained
+            # model can converse, but never silently replace confirmed teacher
+            # facts or reliable symbolic reasoning.
             self.awaiting_explanation=False
+            llm_response=self.language.generate(message,max_tokens=320)
+            if llm_response:
+                self.last_question=None
+                return llm_response,'linguagem pré-treinada local (llama.cpp); não é treino Nord'
             reply,source=self.answer(intent.question)
             if source=='sem treino suficiente':
                 self.awaiting_explanation=True
@@ -475,6 +500,7 @@ class Brain:
                     'aprendizagem_autonoma_pausada':self.memory.training_paused(),
                     'aprovacao_de_hipoteses':self.memory.review_required(),
                     'fontes_oficiais_treinadas':self.memory.source_count(),
+                    'linguagem_local':self.language.status(),
                     'dados':str(self.data_dir)}
 
     def close(self):

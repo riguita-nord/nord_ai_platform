@@ -12,6 +12,7 @@ import json
 import os
 import re
 import unicodedata
+from xml.etree import ElementTree
 from urllib import parse, request
 
 OFFICIAL = (
@@ -206,35 +207,72 @@ def _fetch_fixed(url: str) -> tuple[str,str]:
     return title,summary[:220]
 
 
-def search(topic: str):
-    """Public-source discovery. An empty result means the search was inconclusive.
+def _bing_rss_search(query: str):
+    """Independent no-key fallback. Bing RSS may be rate limited or disabled.
 
-    Does not silently trust snippets or update model parameters. User approves
-    a source in the conversation before any text is used as a training label.
+    XML is parsed as data only; fetched URLs are not opened or executed.
     """
+    url='https://www.bing.com/search?'+parse.urlencode({'q':query,'format':'rss'})
+    raw=_read_response(url,max_bytes=160000)
+    root=ElementTree.fromstring(raw)
+    rows=[]
+    for item in root.findall('.//channel/item')[:7]:
+        rows.append((item.findtext('title',''),item.findtext('description',''),
+                     item.findtext('link','')))
+    return rows
+
+
+def search_detailed(topic: str):
+    """Return attributed results AND provider diagnostics without false claims.
+
+    Searches run only for public, privacy-screened queries. No downloaded
+    snippets are admitted as trusted training labels without user review.
+    """
+    attempts=[]
     query=_safe_query(topic)
-    if query is None:return []
+    if query is None:
+        return [],['Pesquisa bloqueada: pedido inválido ou possivelmente privado.']
     selected=source_for(query)
     if selected:
         url,label=selected
         try:
             title,summary=_fetch_fixed(url)
-            return [{'title':title or label,'summary':summary,'url':url,
-                     'source_tier':'official_primary','source_label':label,'provider':'fixed'}]
-        except (OSError,ValueError,TimeoutError):
-            pass
+            return ([{'title':title or label,'summary':summary,'url':url,
+                     'source_tier':'official_primary','source_label':label,'provider':'fixed'}],
+                    ['Página oficial: resultado encontrado.'])
+        except (OSError,ValueError,TimeoutError) as exc:
+            attempts.append('Página oficial: '+type(exc).__name__)
     key=os.getenv('NORD_BRAVE_API_KEY','').strip()
-    try:
-        if key:
-            rows=_brave_search(query,key)
-            results=_to_results(rows,query,'brave')
-            if results:return results
-    except (OSError,ValueError,KeyError,TimeoutError,TypeError,json.JSONDecodeError):
-        pass
-    try:
-        return _to_results(_ddg_search(query),query,'duckduckgo-html')
-    except (OSError,ValueError,TimeoutError):
-        return []
+    if key:
+        try:
+            results=_to_results(_brave_search(query,key),query,'brave')
+            attempts.append(f'Brave API: {len(results)} resultados úteis')
+            if results:return results,attempts
+        except (OSError,ValueError,KeyError,TimeoutError,TypeError,json.JSONDecodeError) as exc:
+            attempts.append('Brave API: '+type(exc).__name__)
+    else:
+        attempts.append('Brave API: sem chave (opcional)')
+    for name,fn in (('DuckDuckGo HTML',_ddg_search),('Bing RSS',_bing_rss_search)):
+        try:
+            results=_to_results(fn(query),query,name.lower().replace(' ','-'))
+            attempts.append(f'{name}: {len(results)} resultados úteis')
+            if results:return results,attempts
+        except (OSError,ValueError,TimeoutError,ElementTree.ParseError) as exc:
+            attempts.append(f'{name}: {type(exc).__name__}')
+    return [],attempts
+
+
+def search(topic: str):
+    """Source-attributed public research, without hidden trust or training."""
+    return search_detailed(topic)[0]
+
+
+def search_diagnostic(topic: str='Elon Musk') -> str:
+    results,attempts=search_detailed(topic)
+    return ('Diagnóstico de pesquisa para «'+topic+'»:\n  • '
+            +'\n  • '.join(attempts)
+            +f'\nTotal de fontes encontradas: {len(results)}. '
+            +'Uma falha de rede ou bloqueio externo não é resolvida por treino neuronal.')
 
 
 def public_question(message: str) -> str | None:

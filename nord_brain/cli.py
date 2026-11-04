@@ -25,8 +25,10 @@ HELP='''Fala normalmente comigo. Exemplos:
   Pausa aprendizagem. / Retoma aprendizagem.
 
 Comandos técnicos opcionais: /cerebro, /avaliar, /ajuda, /sair
-  /treinar-portugues 20    (aprendizagem real em CPU, com avaliação)
-  /avaliar-portugues      (perda em português em perguntas reservadas)
+  /treinar-portugues 20    (treino REAL nos pesos, CPU, com avaliação separada)
+  /avaliar-portugues      (perda em frases não usadas no currículo)
+  /diagnostico-pesquisa   (testar pesquisa na Internet e fornecedores)
+  /diagnostico-linguagem  (verificar modelo linguístico local)
 A aprendizagem, a revisão e a decisão experimental de crescimento funcionam
 sem comandos, conforme os limites e testes configurados. A rede começa sem
 pré-treino, por isso a linguagem e o raciocínio ainda serão muito limitados.
@@ -60,16 +62,21 @@ def handle(brain,line):
     if line.startswith('/treinar-portugues'):
         from .portuguese_training import train, describe
         parts=line.split()
-        if len(parts)>2:
-            raise ValueError('Usa /treinar-portugues ou /treinar-portugues 20')
+        if len(parts)>2:raise ValueError('Usa /treinar-portugues ou /treinar-portugues 20')
         amount=int(parts[1]) if len(parts)==2 else 20
         return describe(train(brain,amount))
     if line=='/avaliar-portugues':
         from .portuguese_training import evaluate
         result=evaluate(brain)
-        return ('Ainda não há perguntas de avaliação independentes.' if result is None
-                else f"Perda em português: {result['loss']} ({result['examples']} perguntas reservadas). "
-                     'Isto mede previsão de tokens, não fluência.')
+        return ('Ainda não existem perguntas de avaliação independentes.' if result is None
+                else f"Perda em português: {result['loss']} ({result['examples']} perguntas nunca treinadas). "
+                     'Isto não equivale a fluência; avalia apenas a previsão dos tokens.')
+    if line.startswith('/diagnostico-pesquisa'):
+        from .internet import search_diagnostic
+        term=line.removeprefix('/diagnostico-pesquisa').strip() or 'Elon Musk'
+        return search_diagnostic(term)
+    if line=='/diagnostico-linguagem':
+        return 'Modelo de linguagem: '+brain.language.status()+'. O treino do Transformer Nord é separado.'
     if line=='/ajuda':return HELP
     if line=='/cerebro':return json.dumps(brain.status(),ensure_ascii=False,indent=2)
     if line=='/avaliar':
@@ -84,7 +91,7 @@ def main(argv=None):
     parser.add_argument('--data',type=Path,default=Path(os.environ.get('NORD_DATA',str(Path.home()/'.nord-brain'))))
     args=parser.parse_args(argv)
     brain=Brain(args.data)
-    print('Nord Brain v1.2 + Treino PT | Transformer próprio | aprendizagem autónoma experimental')
+    print('Nord Brain v1.5 | linguagem local opcional + Transformer próprio + aprendizagem experimental')
     print('Fala normalmente. Escreve /ajuda para exemplos ou /sair para terminar.')
     try:
         while True:
