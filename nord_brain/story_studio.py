@@ -254,6 +254,37 @@ class StoryStudio:
             written.append({'number':number,'title':chapter_title,'body':body,'source':source})
         return {'book':self.active(),'chapters':written}
 
+    def revise_last(self, language, *, kind: str = 'longer') -> dict | None:
+        """Revise the last saved chapter, preserving its book and chapter ID."""
+        book = self.active()
+        if not book or not book['written']:
+            return None
+        number = book['written']
+        row = self.db.execute('SELECT title,body FROM chapters WHERE book_id=? AND number=?',
+                              (book['id'],number)).fetchone()
+        if row is None:
+            return None
+        title, original = row
+        direction = {
+            'longer':'Reescreve o capítulo por completo e torna-o substancialmente mais longo.',
+            'rewrite':'Reescreve o capítulo sem alterar os factos centrais.',
+            'ending':'Cria um final alternativo para este capítulo, preservando as personagens.'
+        }.get(kind,'Reescreve com melhor desenvolvimento.')
+        prompt = (direction + ' Mantém a continuidade e o português europeu. '
+                  'Responde apenas com a prosa revista.\n'
+                  'LIVRO: '+book['title']+'\nCAPÍTULO ANTERIOR:\n'+original[:5000])
+        output = language.generate(prompt,creative=True,max_tokens=1200,
+                                   remember=False) if language else None
+        if not output or (kind == 'longer' and len(output)<len(original)*1.2):
+            from .story_revision import revise_story
+            output = revise_story(original,kind)
+        recap = (f'{title}: Início: {output[:170].strip()} '
+                 f'Final: {output[-240:].strip()}')[:550]
+        with self.db:
+            self.db.execute('UPDATE chapters SET body=?,recap=? WHERE book_id=? AND number=?',
+                            (output,recap,book['id'],number))
+        return {'number':number,'title':title,'body':output}
+
     def export(self) -> Path | None:
         book=self.active()
         if not book:return None

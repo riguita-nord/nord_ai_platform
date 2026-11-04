@@ -36,12 +36,19 @@ def _endpoint() -> str:
 class LocalLanguage:
     def __init__(self):
         self.history: list[dict[str,str]]=[]
+        self.context_provider = None  # Optional persistent Brain dialogue store
 
     def generate(self, prompt: str, *, creative: bool=False, max_tokens: int=320, remember: bool=True) -> str | None:
         if os.getenv('NORD_LLM', 'on').lower() in ('0','false','off','no'):
             return None
         endpoint=_endpoint()
-        messages=[{'role':'system','content':SYSTEM}]+(self.history[-8:] if remember else [])+[
+        # When attached to Brain, use the SAME persisted dialogue for every
+        # module. Do not rely on a separate in-memory LLM-only history.
+        if remember and self.context_provider is not None:
+            prior=self.context_provider()
+        else:
+            prior=self.history[-8:] if remember else []
+        messages=[{'role':'system','content':SYSTEM}]+prior+[
             {'role':'user','content':prompt[:2000]}]
         body=json.dumps({'model':os.getenv('NORD_LLM_MODEL','local'),
             'messages':messages,'stream':False,'max_tokens':max(48,min(1200,max_tokens)),
@@ -67,7 +74,7 @@ class LocalLanguage:
             if not result or len(result)>12000:return None
         except (TypeError,ValueError,KeyError,IndexError):
             return None
-        if remember:
+        if remember and self.context_provider is None:
             self.history.extend([{'role':'user','content':prompt[:350]},
                                  {'role':'assistant','content':result[:900]}])
             self.history=self.history[-8:]

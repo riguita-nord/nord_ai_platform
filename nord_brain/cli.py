@@ -40,6 +40,8 @@ Comandos técnicos opcionais: /cerebro, /avaliar, /ajuda, /sair
   /livro ler <n>          (reler um capítulo)
   /livro exportar         (exporta Markdown para a pasta local)
   /diagnostico-linguagem  (verificar modelo linguístico local)
+  /contexto             (ver o último assunto guardado)
+  /limpar-contexto       (apagar apenas o histórico de conversa)
 A aprendizagem, a revisão e a decisão experimental de crescimento funcionam
 sem comandos, conforme os limites e testes configurados. A rede começa sem
 pré-treino, por isso a linguagem e o raciocínio ainda serão muito limitados.
@@ -114,6 +116,16 @@ def handle(brain,line):
         if op in ('exportar','guardar'):
             return brain.book_operation(BookCommand('export'))[0]
         raise ValueError('Comando de livro inválido. Usa /livro ajuda.')
+    if line=='/contexto':
+        latest=brain.dialogue.latest()
+        if latest is None:return 'Ainda não existe contexto de conversa guardado.'
+        return (f'Último assunto ({latest["focus"]}): {latest.get("topic") or latest["question"]}\n'
+                'A memória de conversa é local e separada das lições neuronais. '
+                'Usa /limpar-contexto para apagá-la.')
+    if line=='/limpar-contexto':
+        brain.dialogue.clear()
+        brain.language.history.clear()
+        return 'Contexto recente apagado. Os livros e as lições aprendidas foram preservados.'
     if line=='/ajuda':return HELP
     if line=='/cerebro':return json.dumps(brain.status(),ensure_ascii=False,indent=2)
     if line=='/avaliar':
@@ -128,7 +140,7 @@ def main(argv=None):
     parser.add_argument('--data',type=Path,default=Path(os.environ.get('NORD_DATA',str(Path.home()/'.nord-brain'))))
     args=parser.parse_args(argv)
     brain=Brain(args.data)
-    print('Nord Brain v1.6 | livros por capítulos + linguagem local opcional + aprendizagem experimental')
+    print('Nord Brain v1.7 | livros por capítulos + linguagem local opcional + aprendizagem experimental')
     print('Fala normalmente. Escreve /ajuda para exemplos ou /sair para terminar.')
     try:
         while True:

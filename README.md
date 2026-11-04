@@ -1,3 +1,56 @@
+# Nord Brain V1.7 — contexto contínuo para toda a conversa
+
+A Nord Brain mantém agora **um contexto local e limitado das 24 últimas interações** (`~/.nord-brain/dialogue.sqlite3`), separado de `memory.sqlite3` e dos pesos neuronais. Não é um novo modelo pré-treinado: é memória operacional para interpretar referências a mensagens anteriores.
+
+```text
+tu> conta-me uma história
+nord> [história original]
+tu> faz uma mais longa
+nord> [reescreve a MESMA história, mantendo personagens, descoberta e conflito]
+tu> continua a história
+nord> [continua os acontecimentos anteriores]
+tu> muda o final
+nord> [novo final para a história que está a ser discutida]
+tu> qual era o nome da personagem?
+nord> [responde usando a história anterior]
+```
+
+Também funciona com livros criados por `cria um livro sobre ...`: depois de escrever um capítulo, `faz uma mais longa` atualiza o **mesmo capítulo guardado**, sem criar um livro novo. `continua a história` escreve o capítulo seguinte. O contexto continua disponível depois de reiniciar o terminal, enquanto usares a mesma pasta de dados.
+
+- **Com o Qwen local ativo:** reescreve e prolonga a história com um pedido contextual ao modelo, limitado para CPU.
+- **Sem modelo pré-treinado:** cria uma expansão procedural que preserva a narrativa anterior; a criatividade e a naturalidade continuam limitadas. Não a apresenta como fluência neuronal.
+- **Outros assuntos:** `explica melhor`, `fala mais sobre isso` e semelhantes utilizam as respostas recentes como contexto; sem modelo local, a Nord Brain identifica o tema anterior e assinala a limitação.
+- **Privacidade e controlo:** `/contexto` mostra o último assunto, `/limpar-contexto` apaga o histórico de conversa e o histórico transitório do modelo linguístico. **Não apaga** livros, lições, checkpoints ou a memória do professor.
+- A conversa **nunca é convertida automaticamente em factos ou exemplos de treino**. Pedidos como `faz uma mais longa` não alteram os pesos neuronais nem entram nas lições.
+
+Atualiza com `git pull origin main` e inicia com `./nord`. Os testes incluem a reprodução da conversa em que uma história curta é seguida por `faz uma mais longa`, além de testes de persistência, isolamento da memória e reescrita de capítulos.
+
+---
+
+
+## Conversa geral contínua (V1.7)
+
+- **Todos os módulos contam**: depois de uma conta, pesquisa, simulação, livro ou conversa casual, o texto da interação fica em `dialogue.sqlite3`, separado de `memory.sqlite3` e de qualquer treino neuronal.
+- **Mesmo depois de reiniciar**, o modelo local recebe até **cinco interações anteriores** como mensagens `user`/`assistant` na API de conversação, com texto abreviado para poupar RAM/contexto. A base SQLite conserva até 24 interações.
+- **Referências e continuidade**: «o que achas disso?», «e ele?», «quem é ele?», «explica melhor», «resume isso», «faz uma mais longa» e «continua» utilizam o assunto anterior em vez de ensinar falsas respostas.
+- **Assunto ativo**: perguntas relacionadas herdam o assunto inicial; uma pergunta independente passa a ser o novo assunto. O histórico do Qwen não é uma memória paralela e volátil: usa o mesmo registo de diálogo da Nord Brain.
+- **Sem Qwen pré-treinado**: a Nord Brain ainda identifica o assunto anterior e consegue fazer certas revisões procedurais de histórias, mas **não** consegue garantir explicações e conversas livres. Um histórico não dá fluência a um Transformer treinado do zero.
+- **Privacidade**: o modelo linguístico só pode ser servido no `localhost`. O histórico fica no disco local. `/contexto` mostra o assunto atual e `/limpar-contexto` apaga só o histórico, mantendo lições e livros.
+
+Teste manual:
+
+```text
+tu> 4+4
+nord> O resultado é 8.
+tu> explica melhor
+tu> o que achas disso?
+tu> conta-me uma historia
+tu> faz uma mais longa
+tu> quem era ela?
+```
+
+> A conversa não tem memória infinita. O contexto completo dos últimos cinco turnos pode ser resumido por limites de tamanho; conhecimentos importantes devem ficar guardados separadamente e com proveniência.
+
 # Nord Brain V1.6 — romances e histórias longas por capítulos
 
 A Nord Brain agora dispõe de um **estúdio de histórias persistente**. Ao contrário do pedido de conto curto, um livro é desenvolvido em capítulos, com plano de enredo, protagonista, cenário, conflito e resumos do que aconteceu. Os capítulos continuam disponíveis depois de reiniciares o programa. A ficção **não é gravada como conhecimento factual nem usada automaticamente no treino neuronal**.

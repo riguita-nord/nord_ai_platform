@@ -26,6 +26,8 @@ from .cognition import CognitiveLab
 from .creative import creative_request, story
 from .language_backend import LocalLanguage
 from .story_studio import StoryStudio, BookCommand, parse_book_command
+from .dialogue import DialogueMemory, followup_kind
+from .story_revision import revise_story
 
 
 class Brain:
@@ -51,6 +53,10 @@ class Brain:
         self.cognition=CognitiveLab(self)
         self.language=LocalLanguage()
         self.stories=StoryStudio(self.data_dir)
+        self.dialogue=DialogueMemory(self.data_dir)
+        # Every reply, including symbolic reasoning and web research, now
+        # becomes context for the local language model and survives restart.
+        self.language.context_provider=self.dialogue.context_messages
         self._greeting_index=-1
         self.last_question=None
         self.last_research=None
@@ -243,7 +249,129 @@ class Brain:
                 return 'Ainda não sei responder. Podes explicar-me?','sem treino suficiente'
             return (self.core.generate(question) or 'Ainda não sei responder.'),'rede neuronal experimental, não verificada'
 
-    def chat(self,message: str) -> tuple[str,str]:
+    def chat(self, message: str) -> tuple[str, str]:
+        """Conversation entry point: resolve references before intent/teaching.
+
+        A dialogue reply is *not* a lesson and never updates model weights.
+        Keeping a short durable working context prevents "faz uma mais longa"
+        from becoming a meaningless new question or a false teaching example.
+        """
+        with self.lock:
+            previous = self.dialogue.latest()
+            kind = followup_kind(message)
+            result = None
+            if previous and kind is not None:
+                result = self._contextual_reply(message, kind, previous)
+            if result is None:
+                result = self._chat_impl(message)
+            reply, origin = result
+            if origin.startswith(('livro persistente', 'estúdio de histórias',
+                                  'plano narrativo', 'biblioteca local',
+                                  'manuscrito guardado')):
+                focus = 'book'
+            elif origin.startswith(('composição narrativa', 'história contextual',
+                                    'ficção contextual')) or (creative_request(message) is not None
+                    and not creative_request(message).startswith('IDEIAS:')):
+                focus = 'story'
+            elif kind is not None and previous is not None and result is not None and (
+                    origin.startswith('continuidade contextual')
+                    or origin.startswith('ficção contextual')):
+                focus = previous['focus']
+            elif 'cálculo' in origin or 'matemátic' in origin:
+                focus = 'math'
+            elif 'pesquisa' in origin or 'fonte' in origin:
+                focus = 'research'
+            else:
+                focus = 'dialogue'
+            # Short follow-ups inherit the subject; a new independent request
+            # begins a new topic. This topic is a conversation bookmark only,
+            # not a verified fact or learned neural weight.
+            if kind is not None and previous is not None:
+                topic=previous.get('topic') or previous['question']
+            else:
+                topic=message.strip()[:240]
+            self.dialogue.add(message, reply, origin, focus, topic)
+            return reply, origin
+
+    def _contextual_reply(self, message: str, kind: str,
+                          previous: dict[str,str]) -> tuple[str,str] | None:
+        """Respond about the previous answer rather than memorising the prompt."""
+        focus = previous['focus']
+        if kind == 'reference' and focus in ('story','book'):
+            original = previous['reply']
+            if focus == 'book':
+                book = self.stories.active()
+                row = self.stories.chapter(book['written']) if book and book['written'] else None
+                original = row[1] if row else original
+            prompt = ('Responde à pergunta sobre a história anterior, em português '
+                      'e sem inventar acontecimentos.\nPergunta: '+message[:220]
+                      +'\nHistória:\n'+original[:5500])
+            result = self.language.generate(prompt, creative=False, max_tokens=240,
+                                            remember=False)
+            if result:
+                return result,'continuidade contextual com modelo linguístico local'
+            from .story_revision import _elements
+            name, where, discovery = _elements(original)
+            from .dialogue import normalize
+            form = normalize(message)
+            if 'nome' in form or 'quem' in form or 'personagem' in form:
+                return f'A personagem principal da história é {name}.', 'continuidade contextual da história'
+            if 'onde' in form:
+                return f'Na história, {name} vivia {where}.', 'continuidade contextual da história'
+            if 'encontr' in form:
+                return f'Na história, {name} encontrou {discovery}.', 'continuidade contextual da história'
+        if focus == 'book':
+            if kind == 'continue':
+                return self.book_operation(BookCommand('continue'))
+            if kind in ('longer','rewrite','ending'):
+                output = self.stories.revise_last(self.language, kind=kind)
+                if output is not None:
+                    return (f'Capítulo {output["number"]} — {output["title"]} '
+                            f'(versão revista)\n\n{output["body"]}\n\n'
+                            'A alteração ficou guardada no livro.'), 'livro persistente; capítulo revisto'
+        if focus == 'story' and kind in ('longer','rewrite','ending','continue'):
+            instructions = {
+                'longer': 'Reescreve a MESMA história numa versão significativamente mais longa, '
+                          'com novas cenas, diálogos, desenvolvimento e detalhes. Preserva '
+                          'personagens, objetos, conflitos e acontecimentos anteriores.',
+                'rewrite': 'Reescreve esta história de outra forma, mas mantém os nomes, '
+                           'o tema, os acontecimentos essenciais e a continuidade.',
+                'ending': 'Mantém a história até ao momento da resolução e escreve um '
+                          'final alternativo coerente com os mesmos personagens.',
+                'continue': 'Escreve a continuação desta MESMA história. Não recontes o '
+                            'início, avança os acontecimentos e preserva a continuidade.'
+            }
+            prompt = (instructions[kind]+' Responde em português europeu, em prosa. '
+                      'Este texto é ficção, não informação factual.\n'
+                      'HISTÓRIA ANTERIOR:\n'+previous['reply'][:5600])
+            output = self.language.generate(prompt, creative=True, max_tokens=1200,
+                                            remember=False)
+            if (not output or (kind == 'longer'
+                               and len(output.strip()) < len(previous['reply'])*1.25)):
+                output = revise_story(previous['reply'],kind)
+                return output, 'ficção contextual procedural (sem modelo pré-treinado)'
+            return output, 'ficção contextual gerada pelo modelo linguístico local'
+        if kind in ('explain','discuss','reference','shorter','longer','rewrite','continue'):
+            prompt = (
+                'Continua a conversa em português europeu. Usa o histórico recente '
+                'e mantém o assunto. Interpreta «ele», «isso» ou pedidos de revisão '
+                'com base nas mensagens anteriores. Não memorizes a pergunta como '
+                'resposta, não inventes factos nem fontes, e respeita o ensino do '
+                'utilizador. Se faltar informação, pede uma clarificação curta. '
+                'Pedido atual: ' + message[:300])
+            output = self.language.generate(prompt,creative=False,max_tokens=430)
+            if output:
+                return output,'continuidade contextual com modelo linguístico local'
+            # Avoid claiming the scratch-trained Transformer understands a
+            # reference to material it has not learned to paraphrase.
+            return ('Estávamos a falar de «'+(previous.get('topic') or previous['question'])[:140]+'». '
+                    'A minha resposta anterior foi: '+previous['reply'][:420]
+                    +'\nPosso aprofundar com o modelo linguístico local ativo; '
+                    'sem ele, não consigo garantir uma explicação nova.'), \
+                   'continuidade contextual sem modelo linguístico'
+        return None
+
+    def _chat_impl(self,message: str) -> tuple[str,str]:
         """Teacher-facing conversation. Intents are explicit, limited heuristics."""
         with self.lock:
             control=route_control(self,message)
@@ -570,4 +698,5 @@ class Brain:
             self.core.save()
             self.world.save()
             self.stories.close()
+            self.dialogue.close()
             self.memory.close()
