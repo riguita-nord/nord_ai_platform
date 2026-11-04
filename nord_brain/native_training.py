@@ -26,7 +26,10 @@ class CorpusResult:
 def train_approved_file(brain, path: str | Path, *, updates: int=6) -> CorpusResult:
     if not 1 <= updates <= 32:
         raise ValueError('O treino aceita entre 1 e 32 atualizações por sessão')
-    source=Path(path).expanduser().resolve(strict=True)
+    try:
+        source=Path(path).expanduser().resolve(strict=True)
+    except (FileNotFoundError,NotADirectoryError) as exc:
+        raise ValueError('O ficheiro de treino aprovado não existe') from exc
     if not source.is_file() or source.suffix.lower() not in ('.txt','.md'):
         raise ValueError('Seleciona um ficheiro .txt ou .md com texto português aprovado')
     if source.stat().st_size > 100000:
