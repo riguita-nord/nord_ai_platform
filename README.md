@@ -355,3 +355,46 @@ Os testes cobrem também inferência em várias etapas, hipóteses temporárias,
 - Autonomia é limitada a ações e verificadores implementados. Pequenos excertos de documentação primária podem treinar os pesos (desativável), mas sem prova independente de veracidade.
 - O crescimento é condicionado a **plateau, testes separados e ganho sobre um controlo sem crescimento**, além de limites de memória; pode nunca ser aprovado, o que é desejável se não houver benefício.
 - Este programa não gere sozinho o hardware nem é um cérebro comparável ao de uma pessoa. Não corre integralmente num microcontrolador.
+
+---
+
+## Treino neuronal de português em CPU (experimental)
+
+Este módulo altera **os pesos do Transformer próprio da Nord Brain**, sem acrescentar
+um texto de instruções ao contexto das conversas. Inclui um pequeno currículo
+supervisionado sobre conversação em português, criatividade, argumentos,
+opiniões versus factos, hipóteses e correções. As perguntas de avaliação são
+diferentes das perguntas de treino. Não utiliza conteúdos de sites como
+exemplos automáticos e não substitui o que o utilizador ensinou.
+
+Na VM, atualiza o projeto e inicia como habitualmente:
+
+```bash
+cd ~/nord_ai_platform
+git pull origin main
+./nord
+```
+
+Dentro do terminal da Nord Brain:
+
+```text
+/avaliar-portugues
+/treinar-portugues 20
+/avaliar-portugues
+```
+
+- O comando aceita de 1 a 100 exemplos por sessão. A perda é medida sobre
+  frases reservadas, sem fornecer as respostas ao treino.
+- Uma melhoria de perda não significa que a Nord Brain saiba falar português
+  fluentemente; avalia-se apenas a previsão de tokens. O modelo continua sem
+  os pesos pré-treinados do Qwen.
+- O treino autónomo de português é permitido por defeito, mas faz apenas um
+  exemplo de três em três ciclos, até três passagens pelo currículo; não repete
+  indefinidamente estes exemplos. `NORD_PORTUGUESE_TRAIN=off ./nord` desliga-o.
+- Respeita `pausa aprendizagem`. Se a avaliação em português piorar mais de
+  5%, ou se degradar excessivamente exemplos previamente ensinados pelo
+  utilizador e testes existentes, o checkpoint anterior é restaurado.
+- Os ficheiros `brain-v2.pt` e `memory.sqlite3` existentes são preservados.
+  Este treino não instala Qwen, não exige GPU e não promete inteligência geral.
+
+Para conferir os testes: `.venv/bin/python -m unittest discover -s tests -v`.

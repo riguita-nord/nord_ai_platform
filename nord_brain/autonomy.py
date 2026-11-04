@@ -51,6 +51,7 @@ class AutoSettings:
     hypotheses_per_tick: int = 3
     cognitive_lab: bool = False  # explicit AutoSettings keeps legacy tests stable; from_env enables it
     cognitive_tasks_per_tick: int = 1
+    portuguese_practice: bool = True  # bounded CPU dialogue training
 
     @classmethod
     def from_env(cls):
@@ -66,7 +67,8 @@ class AutoSettings:
                    world_scenarios=integer('NORD_WORLD_SCENARIOS',3,1,10),
                    hypotheses_per_tick=integer('NORD_HYPOTHESES_PER_TICK',3,1,8),
                    cognitive_lab=on('NORD_COGNITIVE_LAB',True),
-                   cognitive_tasks_per_tick=integer('NORD_COGNITIVE_TASKS',1,1,3))
+                   cognitive_tasks_per_tick=integer('NORD_COGNITIVE_TASKS',1,1,3),
+                   portuguese_practice=on('NORD_PORTUGUESE_TRAIN',True))
 
 
 class Autonomy:
@@ -149,6 +151,17 @@ class Autonomy:
                     result['after']['joint_loss'])
             # Review mode must not be bypassed by the automatic arithmetic
             # curriculum; otherwise rejected theories would train elsewhere.
+            # Bounded teacher-reviewed dialogue skills. No automatic web labels
+            # and no indefinite repetition of this small training set.
+            if settings.portuguese_practice and self._ticks % 3 == 0:
+                from .portuguese_training import curriculum as portuguese_curriculum, train as train_portuguese
+                total=len(portuguese_curriculum()[0])*3
+                cursor=int(brain.memory.get_meta('portuguese_curriculum_cursor','0'))
+                if cursor<total:
+                    try:
+                        train_portuguese(brain,1)
+                    except ValueError as exc:
+                        brain.memory.event('portuguese_training_skipped',str(exc)[:110])
             if settings.experiments and not brain.memory.review_required():
                 level=max(0,min(MAX_LEVEL,int(brain.memory.get_meta('math_level','0'))))
                 training, heldout=curriculum(level)

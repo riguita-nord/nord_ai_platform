@@ -25,6 +25,8 @@ HELP='''Fala normalmente comigo. Exemplos:
   Pausa aprendizagem. / Retoma aprendizagem.
 
 Comandos técnicos opcionais: /cerebro, /avaliar, /ajuda, /sair
+  /treinar-portugues 20    (aprendizagem real em CPU, com avaliação)
+  /avaliar-portugues      (perda em português em perguntas reservadas)
 A aprendizagem, a revisão e a decisão experimental de crescimento funcionam
 sem comandos, conforme os limites e testes configurados. A rede começa sem
 pré-treino, por isso a linguagem e o raciocínio ainda serão muito limitados.
@@ -55,6 +57,19 @@ def handle(brain,line):
         domain=parts[1] if len(parts)>1 else 'tudo'
         amount=int(parts[2]) if len(parts)>2 else 1
         return brain.simulate_cognition(domain,amount)[0]
+    if line.startswith('/treinar-portugues'):
+        from .portuguese_training import train, describe
+        parts=line.split()
+        if len(parts)>2:
+            raise ValueError('Usa /treinar-portugues ou /treinar-portugues 20')
+        amount=int(parts[1]) if len(parts)==2 else 20
+        return describe(train(brain,amount))
+    if line=='/avaliar-portugues':
+        from .portuguese_training import evaluate
+        result=evaluate(brain)
+        return ('Ainda não há perguntas de avaliação independentes.' if result is None
+                else f"Perda em português: {result['loss']} ({result['examples']} perguntas reservadas). "
+                     'Isto mede previsão de tokens, não fluência.')
     if line=='/ajuda':return HELP
     if line=='/cerebro':return json.dumps(brain.status(),ensure_ascii=False,indent=2)
     if line=='/avaliar':
@@ -69,7 +84,7 @@ def main(argv=None):
     parser.add_argument('--data',type=Path,default=Path(os.environ.get('NORD_DATA',str(Path.home()/'.nord-brain'))))
     args=parser.parse_args(argv)
     brain=Brain(args.data)
-    print('Nord Brain v1.2 | Transformer próprio | aprendizagem autónoma experimental')
+    print('Nord Brain v1.2 + Treino PT | Transformer próprio | aprendizagem autónoma experimental')
     print('Fala normalmente. Escreve /ajuda para exemplos ou /sair para terminar.')
     try:
         while True:
