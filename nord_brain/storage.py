@@ -44,7 +44,77 @@ class Memory:
             PRIMARY KEY (subject, predicate, object)
         );
         ''')
+        self.db.executescript("""
+        CREATE TABLE IF NOT EXISTS intent_aliases (
+            phrase TEXT PRIMARY KEY, intent TEXT NOT NULL, created INTEGER NOT NULL
+        );
+        """)
+        # Archive one known V0.4 misinterpretation instead of deleting history.
+        # Archived entries are never used to answer questions or for training replay.
+        with self.db:
+            self.db.execute("""
+                UPDATE lessons SET origin='legacy_misinterpreted_instruction'
+                WHERE lower(trim(question)) IN ('o que sabes', 'o que sabes?')
+                AND origin='teacher'
+                AND (lower(answer) LIKE 'quando te digo%'
+                     OR lower(answer) LIKE 'quando eu disser%'
+                     OR lower(answer) LIKE '%quero que me digas%')
+            """)
         self.db.commit()
+
+    def set_intent_alias(self, phrase: str, intent: str):
+        from .conversation import normalize_request
+        key=normalize_request(phrase)
+        if not 2 <= len(key) <= 100 or intent!='self_knowledge':
+            raise ValueError('Interpretação não suportada ou expressão inválida')
+        with self.db:
+            self.db.execute("""
+                INSERT INTO intent_aliases(phrase,intent,created) VALUES(?,?,?)
+                ON CONFLICT(phrase) DO UPDATE SET
+                   intent=excluded.intent,created=excluded.created
+            """, (key,intent,int(time.time())))
+
+    def resolve_intent_alias(self, phrase: str):
+        from .conversation import normalize_request
+        key=normalize_request(phrase)
+        if not 2 <= len(key) <= 100:
+            return None
+        row=self.db.execute(
+            'SELECT intent FROM intent_aliases WHERE phrase=?',(key,)).fetchone()
+        return row[0] if row else None
+
+    def teacher_lesson_count(self):
+        return self.db.execute(
+            "SELECT COUNT(*) FROM lessons WHERE origin='teacher'").fetchone()[0]
+
+    def recent_teacher_learnings(self, limit=4):
+        """Display only teacher-supplied concepts and examples, never web guesses."""
+        limit=max(1,min(int(limit),10))
+        recent=[]
+        seen=set()
+        concepts=self.db.execute("""
+            SELECT term,description FROM concepts WHERE origin='teacher'
+            ORDER BY created DESC,term LIMIT ?
+        """,(limit*2,)).fetchall()
+        examples=self.db.execute("""
+            SELECT question,answer FROM lessons WHERE origin='teacher'
+            ORDER BY id DESC LIMIT ?
+        """,(limit*3,)).fetchall()
+        for term,desc in concepts:
+            item=f'{term}: {desc}'
+            norm=term.strip().casefold()
+            if norm not in seen:
+                recent.append(item.replace('\n',' ')[:160])
+                seen.add(norm)
+            if len(recent)>=limit:return recent
+        for question,answer in examples:
+            key=question.strip().casefold()
+            if key not in seen:
+                # A learned answer is quoted as an example, not as a new skill.
+                recent.append(f'{question} → {answer}'.replace('\n',' ')[:160])
+                seen.add(key)
+            if len(recent)>=limit:break
+        return recent
 
     def add_reasoning_fact(self, subject, predicate, obj, statement, origin='teacher'):
         if predicate not in ('is_a','has') or origin!='teacher':
@@ -74,17 +144,17 @@ class Memory:
         return int(cur.lastrowid)
 
     def exact(self, question: str):
-        row=self.db.execute('SELECT answer FROM lessons WHERE lower(question)=lower(?) ORDER BY id DESC LIMIT 1',(question.strip(),)).fetchone()
+        row=self.db.execute("SELECT answer FROM lessons WHERE lower(question)=lower(?) AND origin!='legacy_misinterpreted_instruction' ORDER BY id DESC LIMIT 1",(question.strip(),)).fetchone()
         return row[0] if row else None
 
     def is_holdout(self, question: str) -> bool:
         return self.db.execute('SELECT 1 FROM holdouts WHERE lower(question)=lower(?)', (question.strip(),)).fetchone() is not None
 
     def lesson_count(self):
-        return self.db.execute('SELECT COUNT(*) FROM lessons').fetchone()[0]
+        return self.db.execute("SELECT COUNT(*) FROM lessons WHERE origin!='legacy_misinterpreted_instruction'").fetchone()[0]
 
     def lessons(self, limit=100):
-        return self.db.execute('SELECT question,answer FROM lessons ORDER BY id DESC LIMIT ?', (limit,)).fetchall()
+        return self.db.execute("SELECT question,answer FROM lessons WHERE origin!='legacy_misinterpreted_instruction' ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
 
     def concept(self, term: str, definition: str, origin='teacher'):
         term,definition=term.strip().lower(),definition.strip()
@@ -119,7 +189,7 @@ class Memory:
             self.db.execute('INSERT INTO metrics(event,value,created) VALUES(?,?,?)',(event,float(value),int(time.time())))
 
     def unique_lesson_count(self):
-        return self.db.execute('SELECT COUNT(DISTINCT lower(question)) FROM lessons').fetchone()[0]
+        return self.db.execute("SELECT COUNT(DISTINCT lower(question)) FROM lessons WHERE origin!='legacy_misinterpreted_instruction'").fetchone()[0]
 
     def get_meta(self,key,default=None):
         row=self.db.execute('SELECT value FROM autonomy_meta WHERE key=?',(key,)).fetchone()

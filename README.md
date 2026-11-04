@@ -10,10 +10,32 @@ git pull origin main
 bash install.sh
 ```
 
-# Nord Brain V0.4 — raciocínio verificável, aprendizagem autónoma e conversa pelo terminal
+# Nord Brain V0.4.1 — raciocínio verificável, aprendizagem autónoma e conversa pelo terminal
 
 **Projeto experimental, sem pesos pré-treinados.** O cérebro é um Transformer próprio em PyTorch (atenção causal/GQA, RoPE, RMSNorm e SwiGLU) e **não usa o Qwen nem Ollama**. A arquitetura está preparada para aprender pesos, guardar experiências e experimentar expansão neuronal. **Não é equivalente a um LLM treinado; não compreende português fluentemente e não existe garantia de inteligência geral.**
 
+
+## V0.4.1 — «O que sabes?» e interpretação de frases
+
+Agora a Nord Brain responde a «O que sabes?», «O que sabes fazer?», «O que aprendeste?» e «Quais são as tuas capacidades?» com um relatório **dinâmico**, construído a partir das suas funções disponíveis, lições ensinadas pelo utilizador, relações guardadas e passos reais de treino. Não repete uma resposta fixa memorizada e distingue «O que sabes sobre a Lua?» de uma pergunta sobre si própria.
+
+Exemplo de ensino conversacional:
+
+```text
+tu> o que sabes
+nord> Neste momento, tenho estas capacidades programadas: ...
+      Algumas coisas que me ensinaste: ...
+      Estado: ... exemplos ... passos de treino neuronal.
+
+tu> quando te digo o que sabes eu quero que me digas o que sabes fazer e o que aprendeste
+nord> Percebi. Quando disseres «o que sabes», vou mostrar as minhas capacidades reais e o que já me ensinaste, em vez de repetir esta explicação.
+```
+
+Também é possível definir uma expressão alternativa, por exemplo: `Quando te digo faz o meu balanço, quero que me digas o que sabes fazer e o que aprendeste.` A associação de intenção é guardada em SQLite e funciona após reiniciar, inclusive com pequenas diferenças de maiúsculas, acentos e pontuação. **A interpretação de frases é simbólica e limitada a este tipo de pedido:** não significa que o Transformer adquiriu compreensão linguística geral, nem treina automaticamente os pesos com uma descrição que não é uma resposta factual.
+
+Uma migração estreita marca como `legacy_misinterpreted_instruction` as antigas respostas erradas ao pedido «o que sabes», quando contêm instruções como «quando te digo...». Estes registos ficam preservados no histórico da base de dados, mas deixam de ser usados para responder e treinar. Os restantes conhecimentos e checkpoints permanecem intactos.
+
+Testes específicos: `.venv/bin/python -m unittest tests.test_self_knowledge -v`.
 
 ## Novo na V0.4 — Raciocínio com provas e treino derivado
 

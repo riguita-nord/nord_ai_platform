@@ -12,10 +12,11 @@ import threading
 from .core import NeuralCore, TransformerConfig
 from .storage import Memory
 from .vocabulary import initialize
-from .conversation import interpret
+from .conversation import Intent, interpret, is_self_knowledge_request
 from .autonomy import Autonomy
 from .internet import search
 from .reasoning import ReasoningEngine, parse_fact
+from .self_knowledge import report as self_knowledge_report
 
 
 class Brain:
@@ -66,6 +67,12 @@ class Brain:
         with self.lock:
             question=question.strip()
             self.last_question=question
+            if not neural_only and (is_self_knowledge_request(question) or
+                    self.memory.resolve_intent_alias(question)=='self_knowledge'):
+                return self_knowledge_report(
+                    self.memory, self.core,
+                    internet_enabled=os.getenv('NORD_INTERNET','off').lower() in ('on','1','true')
+                ), 'relatório local de capacidades e memória'
             if not neural_only:
                 known=self.memory.exact(question)
                 if known is not None:
@@ -81,6 +88,29 @@ class Brain:
         """Teacher-facing conversation. Intents are explicit, limited heuristics."""
         with self.lock:
             intent=interpret(message,self.last_question,self.awaiting_explanation)
+            # Persistent, teacher-defined phrasing for a supported dynamic intent.
+            # Never reuse an old memorised answer for a self-report.
+            if (intent.kind in ('question','definition_question','explanation')
+                    and self.memory.resolve_intent_alias(message)=='self_knowledge'):
+                intent=Intent('self_knowledge')
+            if intent.kind=='intent_instruction':
+                self.awaiting_explanation=False
+                self.last_question=None
+                if intent.topic!='self_knowledge':
+                    return ('Percebi que queres definir como devo interpretar uma frase, '
+                            'mas ainda só consigo guardar regras sobre as minhas capacidades '
+                            'e o que aprendi. Podes explicar-me isso dessa forma?'), 'instrução não suportada'
+                self.memory.set_intent_alias(intent.question, 'self_knowledge')
+                return (f'Percebi. Quando disseres «{intent.question}», vou mostrar as '
+                        'minhas capacidades reais e o que já me ensinaste, em vez de '
+                        'repetir esta explicação.'), 'interpretação guardada, não treino neuronal'
+            if intent.kind=='self_knowledge':
+                self.awaiting_explanation=False
+                self.last_question=None
+                return (self_knowledge_report(
+                    self.memory, self.core,
+                    internet_enabled=os.getenv('NORD_INTERNET','off').lower() in ('on','1','true')
+                ), 'relatório local de capacidades e memória')
             if intent.kind=='empty':return 'Diz-me alguma coisa.','terminal'
             if intent.kind=='greeting':return 'Olá! Estou a aprender. Podes ensinar-me algo ou fazer uma pergunta.','interface inicial'
             if intent.kind=='farewell':return 'Até à próxima! Vou guardar aquilo que aprendi.','interface inicial'
