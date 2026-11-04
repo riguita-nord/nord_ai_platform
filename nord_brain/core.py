@@ -1,57 +1,213 @@
-"""Small byte-level recurrent neural network with real online BPTT training.
+"""Small *own-weights* decoder-only Transformer inspired by Qwen's building blocks.
 
-This is a research model, not a pretrained language model. Predictions may be
-incoherent, even after thousands of examples. NumPy only, CPU friendly.
+RMSNorm, causal grouped-query attention, RoPE, and SwiGLU. This is NOT Qwen,
+contains NO pretrained weights, and is not expected to speak fluently at birth.
+
+The model learns via genuine PyTorch autograd and can grow its MLP channels
+while preserving its existing forward output at the instant of expansion.
 """
 from __future__ import annotations
 
+from dataclasses import asdict, dataclass
 import os
 from pathlib import Path
 import tempfile
-import numpy as np
+
+import torch
+from torch import nn
+from torch.nn import functional as F
+
+VOCAB_SIZE = 258  # UTF-8 byte IDs [0,255], EOS 256, BOS 257
+EOS, BOS = 256, 257
+
+
+@dataclass
+class TransformerConfig:
+    d_model: int = 128
+    layers: int = 4
+    heads: int = 4
+    kv_heads: int = 2
+    intermediate_size: int = 384
+    context: int = 256
+
+    def validate(self):
+        if not 32 <= self.d_model <= 512 or self.d_model % self.heads:
+            raise ValueError('Dimensão do modelo incompatível com heads')
+        if not 1 <= self.layers <= 12 or not 1 <= self.heads <= 16:
+            raise ValueError('Número de camadas ou cabeças fora dos limites')
+        if self.heads % self.kv_heads or self.kv_heads < 1:
+            raise ValueError('GQA precisa de heads divisíveis por kv_heads')
+        if self.d_model // self.heads % 2:
+            raise ValueError('RoPE exige head_dim par')
+        if not self.d_model <= self.intermediate_size <= 4096:
+            raise ValueError('Dimensão intermediária fora dos limites')
+        if not 64 <= self.context <= 2048:
+            raise ValueError('Janela de contexto fora dos limites')
+
+
+class RMSNorm(nn.Module):
+    def __init__(self, size: int, eps: float = 1e-6):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(size))
+        self.eps = eps
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        normalized = x.float() * torch.rsqrt(x.float().pow(2).mean(-1, keepdim=True) + self.eps)
+        return normalized.to(x.dtype) * self.weight
+
+
+def rotary_embedding(x: torch.Tensor) -> torch.Tensor:
+    # x: [batch, heads, sequence, head_dim]
+    t, d = x.shape[-2:]
+    inv = 1.0 / (10000.0 ** (torch.arange(0, d, 2, device=x.device, dtype=torch.float32) / d))
+    angles = torch.outer(torch.arange(t, device=x.device, dtype=torch.float32), inv)
+    sin = angles.sin()[None, None, :, :]
+    cos = angles.cos()[None, None, :, :]
+    left, right = x.float()[..., : d // 2], x.float()[..., d // 2 :]
+    return torch.cat((left * cos - right * sin, right * cos + left * sin), dim=-1).to(x.dtype)
+
+
+class GroupedAttention(nn.Module):
+    def __init__(self, config: TransformerConfig):
+        super().__init__()
+        self.heads = config.heads
+        self.kv_heads = config.kv_heads
+        self.head_dim = config.d_model // config.heads
+        self.q_proj = nn.Linear(config.d_model, config.heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(config.d_model, config.kv_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.d_model, config.kv_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(config.heads * self.head_dim, config.d_model, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        b, t, _ = x.shape
+        def reshape(y, heads):
+            return y.view(b, t, heads, self.head_dim).transpose(1, 2)
+        q = rotary_embedding(reshape(self.q_proj(x), self.heads))
+        k = rotary_embedding(reshape(self.k_proj(x), self.kv_heads))
+        v = reshape(self.v_proj(x), self.kv_heads)
+        if self.kv_heads != self.heads:
+            k = k.repeat_interleave(self.heads // self.kv_heads, dim=1)
+            v = v.repeat_interleave(self.heads // self.kv_heads, dim=1)
+        a = F.scaled_dot_product_attention(q, k, v, is_causal=True, dropout_p=0)
+        return self.o_proj(a.transpose(1, 2).contiguous().reshape(b, t, -1))
+
+
+class SwiGLU(nn.Module):
+    def __init__(self, d_model: int, width: int):
+        super().__init__()
+        self.gate_proj = nn.Linear(d_model, width, bias=False)
+        self.up_proj = nn.Linear(d_model, width, bias=False)
+        self.down_proj = nn.Linear(width, d_model, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
+
+    def grow(self, additional: int):
+        """Widen MLP preserving output exactly at expansion time (zero down columns)."""
+        old = self.gate_proj.out_features
+        device = self.gate_proj.weight.device
+        dtype = self.gate_proj.weight.dtype
+        d = self.gate_proj.in_features
+        new = old + additional
+        gate = nn.Linear(d, new, bias=False, device=device, dtype=dtype)
+        up = nn.Linear(d, new, bias=False, device=device, dtype=dtype)
+        down = nn.Linear(new, d, bias=False, device=device, dtype=dtype)
+        with torch.no_grad():
+            gate.weight[:old].copy_(self.gate_proj.weight)
+            up.weight[:old].copy_(self.up_proj.weight)
+            down.weight[:, :old].copy_(self.down_proj.weight)
+            down.weight[:, old:].zero_()
+        self.gate_proj, self.up_proj, self.down_proj = gate, up, down
+
+
+class TransformerBlock(nn.Module):
+    def __init__(self, config: TransformerConfig):
+        super().__init__()
+        self.attn_norm = RMSNorm(config.d_model)
+        self.attn = GroupedAttention(config)
+        self.mlp_norm = RMSNorm(config.d_model)
+        self.mlp = SwiGLU(config.d_model, config.intermediate_size)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x + self.attn(self.attn_norm(x))
+        return x + self.mlp(self.mlp_norm(x))
+
+
+class NordTransformer(nn.Module):
+    def __init__(self, config: TransformerConfig):
+        super().__init__()
+        config.validate()
+        self.config = config
+        self.embed = nn.Embedding(VOCAB_SIZE, config.d_model)
+        self.blocks = nn.ModuleList(TransformerBlock(config) for _ in range(config.layers))
+        self.norm = RMSNorm(config.d_model)
+        self.lm_head = nn.Linear(config.d_model, VOCAB_SIZE, bias=False)
+        # Tied embeddings: smaller total parameter and consistent input/output semantics.
+        self.lm_head.weight = self.embed.weight
+        self.apply(self._initialize)
+
+    @staticmethod
+    def _initialize(module):
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            nn.init.normal_(module.weight, mean=0.0, std=0.02)
+
+    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+        if tokens.dim() != 2 or tokens.size(1) > self.config.context:
+            raise ValueError('Entrada excede janela de contexto')
+        x = self.embed(tokens)
+        for block in self.blocks:
+            x = block(x)
+        return self.lm_head(self.norm(x))
+
+    def grow_mlp(self, additional: int):
+        if not 8 <= additional <= 256 or self.config.intermediate_size + additional > 4096:
+            raise ValueError('Expansão entre 8 e 256, máximo de 4096 canais MLP')
+        for block in self.blocks:
+            block.mlp.grow(additional)
+        self.config.intermediate_size += additional
 
 
 class NeuralCore:
-    def __init__(self, path: Path, hidden: int = 96, embedding: int = 32, seed: int = 17):
+    """Simple persistent online-training API. Stores model AND optimizer state."""
+    def __init__(self, path: Path, config: TransformerConfig | None = None, seed: int = 17):
         self.path = Path(path)
-        self.rng = np.random.default_rng(seed)
         self.steps = 0
-        self.params = {}
+        # Avoid flooding a 1-vCPU machine with dozens of CPU worker threads.
+        torch.set_num_threads(max(1, min(4, int(os.environ.get('NORD_THREADS', '1')))))
         if self.path.exists():
-            self.load()
+            state = torch.load(self.path, map_location='cpu', weights_only=True)
+            if int(state.get('version', 0)) != 2:
+                raise ValueError('Checkpoint não pertence ao Nord Transformer V2')
+            self.model = NordTransformer(TransformerConfig(**state['config']))
+            self.model.load_state_dict(state['model'])
+            self.steps = int(state['steps'])
+            self.optimizer = self._optimizer()
+            self.optimizer.load_state_dict(state['optimizer'])
         else:
-            self._initialize(hidden, embedding)
+            torch.manual_seed(seed)
+            self.model = NordTransformer(config or TransformerConfig())
+            self.optimizer = self._optimizer()
 
-    def _initialize(self, hidden: int, embedding: int):
-        if not 16 <= hidden <= 512 or not 8 <= embedding <= 128:
-            raise ValueError('Dimensões neuronais fora dos limites')
-        self.params = {
-            'E': self.rng.normal(0, .04, (256, embedding)).astype('f4'),
-            'Wxh': self.rng.normal(0, .08, (embedding, hidden)).astype('f4'),
-            'Whh': self.rng.normal(0, .04, (hidden, hidden)).astype('f4'),
-            'bh': np.zeros(hidden, dtype='f4'),
-            'Why': self.rng.normal(0, .02, (hidden, 256)).astype('f4'),
-            'by': np.zeros(256, dtype='f4'),
-        }
-        self.acc = {k: np.zeros_like(v) for k, v in self.params.items()}
+    def _optimizer(self):
+        return torch.optim.AdamW(self.model.parameters(), lr=3e-4, weight_decay=0.01)
 
     @property
-    def hidden_size(self) -> int:
-        return int(self.params['bh'].size)
+    def hidden_size(self):
+        # Retained for compatibility with the old terminal command; this is MLP width.
+        return self.model.config.intermediate_size
 
     @property
-    def parameter_count(self) -> int:
-        return sum(v.size for v in self.params.values())
+    def parameter_count(self):
+        return sum(p.numel() for p in self.model.parameters())
 
     def save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        contents = {f'p_{k}': v for k, v in self.params.items()}
-        contents.update({f'a_{k}': v for k, v in self.acc.items()})
-        contents['steps'] = np.asarray([self.steps], dtype=np.int64)
-        fd, temp = tempfile.mkstemp(dir=self.path.parent, prefix='.brain-', suffix='.npz')
+        fd, temp = tempfile.mkstemp(prefix='.nord-transformer-', suffix='.pt', dir=self.path.parent)
         try:
             with os.fdopen(fd, 'wb') as handle:
-                np.savez_compressed(handle, **contents)
+                torch.save({'version': 2, 'config': asdict(self.model.config),
+                            'model': self.model.state_dict(), 'optimizer': self.optimizer.state_dict(),
+                            'steps': self.steps}, handle)
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temp, self.path)
@@ -60,120 +216,75 @@ class NeuralCore:
                 os.unlink(temp)
 
     def load(self):
-        with np.load(self.path, allow_pickle=False) as data:
-            keys = ('E', 'Wxh', 'Whh', 'bh', 'Why', 'by')
-            self.params = {k: np.array(data['p_' + k], dtype='f4', copy=True) for k in keys}
-            self.acc = {k: np.array(data['a_' + k], dtype='f4', copy=True) for k in keys}
-            self.steps = int(data['steps'][0])
-        h = self.hidden_size
-        e = self.params['E'].shape[1]
-        expected = {'E':(256,e), 'Wxh':(e,h), 'Whh':(h,h), 'bh':(h,), 'Why':(h,256), 'by':(256,)}
-        if any(self.params[k].shape != shape or self.acc[k].shape != shape for k,shape in expected.items()):
-            raise ValueError('Checkpoint neuronal incompatível')
+        """Recover last durable checkpoint after an interrupted/failed lesson."""
+        restored = NeuralCore(self.path)
+        self.model, self.optimizer, self.steps = restored.model, restored.optimizer, restored.steps
 
-    def _forward(self, data: np.ndarray):
-        p = self.params
-        h = np.zeros(self.hidden_size, dtype='f4')
-        states = [h]
-        probs = []
-        for idx in data[:-1]:
-            h = np.tanh(p['E'][idx] @ p['Wxh'] + h @ p['Whh'] + p['bh'])
-            logits = h @ p['Why'] + p['by']
-            logits = logits - logits.max()
-            exps = np.exp(logits)
-            probs.append(exps / exps.sum())
-            states.append(h)
-        return states, probs
+    @staticmethod
+    def _example(prompt: str, answer: str, context: int):
+        # Only target the answer's tokens, not the question text.
+        prefix = ('Pergunta: ' + prompt + '\nResposta: ').encode('utf-8')
+        suffix = answer.encode('utf-8')
+        if len(prefix) + len(suffix) + 2 > context:
+            raise ValueError(f'Exemplo demasiado longo para contexto de {context} tokens')
+        full = [BOS] + list(prefix) + list(suffix) + [EOS]
+        ids = torch.tensor(full[:-1], dtype=torch.long).unsqueeze(0)
+        labels = torch.tensor(full[1:], dtype=torch.long).unsqueeze(0)
+        labels[:, :len(prefix)] = -100  # masked prefix; first answer char at index len(prefix)
+        return ids, labels
 
-    def train(self, prompt: str, answer: str, epochs: int = 2, rate: float = .015) -> float:
-        if not 1 <= epochs <= 25:
-            raise ValueError('Épocas fora dos limites')
-        if not 0 < rate <= .1:
-            raise ValueError('Taxa de aprendizagem inválida')
-        # Train on a bounded segment, including both context and answer.
-        sequence = ('Pergunta: ' + prompt + '\nResposta: ' + answer + '\n').encode('utf-8')
-        data = np.frombuffer(sequence[:384], dtype=np.uint8)
-        if data.size < 5:
-            raise ValueError('Exemplo demasiado curto')
-        loss = float('inf')
-        p = self.params
+    def train(self, prompt: str, answer: str, epochs: int = 2, rate: float = 3e-4) -> float:
+        if not 1 <= epochs <= 25 or not 0 < rate <= .01:
+            raise ValueError('Épocas ou taxa de aprendizagem inválidas')
+        tokens, labels = self._example(prompt, answer, self.model.config.context)
+        self.model.train()
+        for group in self.optimizer.param_groups:
+            group['lr'] = rate
+        loss_value = float('nan')
         for _ in range(epochs):
-            states, probs = self._forward(data)
-            target = data[1:]
-            loss = float(-sum(np.log(max(float(prob[int(y)]),1e-12)) for prob,y in zip(probs,target)) / len(target))
-            grad = {k: np.zeros_like(v) for k,v in p.items()}
-            dhnext = np.zeros(self.hidden_size, dtype='f4')
-            for t in range(len(target)-1, -1, -1):
-                dy = probs[t].copy()
-                dy[target[t]] -= 1
-                dy /= len(target)
-                grad['Why'] += np.outer(states[t+1], dy)
-                grad['by'] += dy
-                dh = dy @ p['Why'].T + dhnext
-                dz = dh * (1 - states[t+1] ** 2)
-                grad['bh'] += dz
-                grad['Wxh'] += np.outer(p['E'][data[t]], dz)
-                grad['Whh'] += np.outer(states[t], dz)
-                grad['E'][data[t]] += dz @ p['Wxh'].T
-                dhnext = dz @ p['Whh'].T
-            norm = np.sqrt(sum(float(np.sum(g*g)) for g in grad.values()))
-            scale = min(1.0, 1.0 / (norm + 1e-8))
-            for k in p:
-                g = grad[k] * scale
-                self.acc[k] += g*g
-                p[k] -= rate * g / np.sqrt(self.acc[k] + 1e-5)
-                if not np.isfinite(p[k]).all():
-                    raise FloatingPointError('Treino neuronal instável; restaurar checkpoint')
+            self.optimizer.zero_grad(set_to_none=True)
+            logits = self.model(tokens)
+            loss = F.cross_entropy(logits.reshape(-1, VOCAB_SIZE), labels.reshape(-1), ignore_index=-100)
+            if not torch.isfinite(loss):
+                raise FloatingPointError('Erro numérico no treino')
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+            self.optimizer.step()
             self.steps += 1
-        return loss
+            loss_value = float(loss.detach())
+        self.model.eval()
+        return loss_value
 
-    def generate(self, prompt: str, max_bytes: int = 140, temperature: float = .75) -> str:
-        p = self.params
-        prefix = ('Pergunta: ' + prompt + '\nResposta: ').encode('utf-8')[-512:]
-        h = np.zeros(self.hidden_size, dtype='f4')
-        for idx in prefix:
-            h = np.tanh(p['E'][idx] @ p['Wxh'] + h @ p['Whh'] + p['bh'])
+    @torch.inference_mode()
+    def generate(self, prompt: str, max_bytes: int = 100, temperature: float = .7) -> str:
+        prefix = ('Pergunta: ' + prompt + '\nResposta: ').encode('utf-8')
+        # Keep enough room for generation; drop oldest prompt bytes if needed.
+        max_length = self.model.config.context
+        tokens = [BOS] + list(prefix)[-(max_length - 1):]
         result = bytearray()
-        for _ in range(max(1, min(300, max_bytes))):
-            logits = (h @ p['Why'] + p['by']) / max(.2, temperature)
-            # Enforce simple byte-level sampling with a bounded top-k.
-            choices = np.argpartition(logits, -16)[-16:]
-            weights = np.exp(logits[choices]-logits[choices].max())
-            weights /= weights.sum()
-            idx = int(self.rng.choice(choices, p=weights))
-            if idx == 10:
+        self.model.eval()
+        for _ in range(max(1, min(int(max_bytes), max_length - 1, 300))):
+            input_ids = torch.tensor(tokens[-max_length:],dtype=torch.long).unsqueeze(0)
+            logits = self.model(input_ids)[0,-1].clone()
+            logits[BOS] = -float('inf')
+            if temperature <= 0:
+                next_token = int(logits.argmax())
+            else:
+                topk = min(32, VOCAB_SIZE)
+                values, indices = torch.topk(logits / max(.1,temperature), topk)
+                next_token = int(indices[torch.multinomial(F.softmax(values,dim=-1),1).item()])
+            if next_token == EOS:
                 break
-            result.append(idx)
-            h = np.tanh(p['E'][idx] @ p['Wxh'] + h @ p['Whh'] + p['bh'])
-        return result.decode('utf-8', errors='ignore').strip()
+            result.append(next_token)
+            tokens.append(next_token)
+        return result.decode('utf-8',errors='ignore').strip()
 
-    def grow(self, extra: int = 16) -> int:
-        """Function-preserving expansion: new hidden channels have zero output effect.
+    def grow(self, extra: int = 16):
+        """Widen all MLPs; preserve initial output, then reset optimizer state.
 
-        The new channels are activated internally and can learn through the new
-        output weights. This does NOT improve intelligence by itself.
+        Changing the parameter shapes invalidates Adam moments. The post-growth
+        model is still untrained for the new connections.
         """
-        if extra < 1 or extra > 64 or self.hidden_size + extra > 512:
-            raise ValueError('Crescimento fora dos limites (máximo 512 neurónios)')
-        p, acc = self.params, self.acc
-        old = self.hidden_size
-        new = old + extra
-        next_p = {}
-        next_p['E'] = p['E'].copy()
-        next_p['Wxh'] = np.concatenate([p['Wxh'], self.rng.normal(0,.02,(p['Wxh'].shape[0],extra)).astype('f4')],axis=1)
-        next_p['Whh'] = np.zeros((new,new),dtype='f4')
-        next_p['Whh'][:old,:old] = p['Whh']
-        next_p['Whh'][:old,old:] = self.rng.normal(0,.02,(old,extra)).astype('f4')
-        next_p['bh'] = np.concatenate([p['bh'],np.zeros(extra,dtype='f4')])
-        next_p['Why'] = np.concatenate([p['Why'],np.zeros((extra,256),dtype='f4')],axis=0)
-        next_p['by'] = p['by'].copy()
-        self.params = next_p
-        next_a = {k:np.zeros_like(v) for k,v in next_p.items()}
-        for k in ('E','by'):
-            next_a[k][...] = acc[k]
-        next_a['Wxh'][:,:old] = acc['Wxh']
-        next_a['Whh'][:old,:old] = acc['Whh']
-        next_a['bh'][:old] = acc['bh']
-        next_a['Why'][:old,:] = acc['Why']
-        self.acc = next_a
+        self.model.grow_mlp(extra)
+        self.optimizer = self._optimizer()
         return self.hidden_size

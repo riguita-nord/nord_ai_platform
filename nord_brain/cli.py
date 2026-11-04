@@ -16,7 +16,7 @@ HELP='''Comandos:
   /avaliar                     Mede generalização nos testes independentes
   /praticar [n]                Revê até n exemplos antigos (máximo 30)
   /pesquisar assunto           Consulta Wikipédia (opcional, não treina)
-  /crescer [n]                 Expansão experimental de neurónios (até 64)
+  /crescer [n]                 Expansão experimental de canais MLP (8..256)
   /cerebro                     Inspeciona dimensões e progresso
   /guardar                     Guarda checkpoint
   /ajuda                       Mostra comandos
@@ -70,7 +70,7 @@ def handle(brain,line):
         extra=int(body or '16')
         before=brain.core.parameter_count
         size=brain.grow(extra)
-        return f'Expansão experimental: {size} neurónios ocultos, +{brain.core.parameter_count-before} pesos. Ainda precisam de treino.'
+        return f'Expansão experimental: MLP com {size} canais por camada, +{brain.core.parameter_count-before} pesos. Ainda precisam de treino.'
     if cmd=='/pesquisar':
         if os.environ.get('NORD_INTERNET','off').lower()!='on':
             return 'Internet desligada. Ativa NORD_INTERNET=on para permitir pesquisa manual.'
@@ -86,8 +86,8 @@ def main(argv=None):
     parser.add_argument('--data',type=Path,default=Path(os.environ.get('NORD_DATA',str(Path.home()/'.nord-brain'))))
     args=parser.parse_args(argv)
     brain=Brain(args.data)
-    print('Nord Brain v0.1 | núcleo neuronal sem pré-treino | /ajuda para comandos')
-    print('Aviso: linguagem neuronal inicial não é fluente e pode produzir texto sem sentido.')
+    print('Nord Brain v0.2 | Transformer próprio sem pré-treino | /ajuda para comandos')
+    print('Aviso: pesos aleatórios; a rede ainda não compreende português e pode produzir texto sem sentido.')
     try:
         while True:
             try:line=input('nord> ').strip()

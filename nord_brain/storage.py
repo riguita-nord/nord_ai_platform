@@ -43,6 +43,9 @@ class Memory:
         row=self.db.execute('SELECT answer FROM lessons WHERE lower(question)=lower(?) ORDER BY id DESC LIMIT 1',(question.strip(),)).fetchone()
         return row[0] if row else None
 
+    def is_holdout(self, question: str) -> bool:
+        return self.db.execute('SELECT 1 FROM holdouts WHERE lower(question)=lower(?)', (question.strip(),)).fetchone() is not None
+
     def lesson_count(self):
         return self.db.execute('SELECT COUNT(*) FROM lessons').fetchone()[0]
 
@@ -69,6 +72,8 @@ class Memory:
     def holdout(self,question,answer):
         if not 1 <= len(question) <= 250 or not 1 <= len(answer) <= 350:
             raise ValueError('Teste inválido')
+        if self.db.execute('SELECT 1 FROM lessons WHERE lower(question)=lower(?)', (question.strip(),)).fetchone():
+            raise ValueError('Esta pergunta já foi ensinada; usa um teste novo')
         with self.db:
             self.db.execute('INSERT OR REPLACE INTO holdouts(question,answer) VALUES(?,?)',(question,answer))
 
