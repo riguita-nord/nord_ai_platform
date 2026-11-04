@@ -1,12 +1,15 @@
-"""Small, explicit Portuguese dialogue parser.
+"""Conservative Portuguese teaching and dialogue intent parser.
 
-This layer recognizes a few *teaching conventions*, not natural-language
-understanding. Unknown input must not silently become a training label.
+Recognizes a small set of forms; this is NOT neural natural-language understanding.
+Meta-instructions are classified before free-form explanations so that directions
+about the assistant's behaviour are never memorised as a literal answer.
 """
 from __future__ import annotations
 from dataclasses import dataclass
 import re
 import unicodedata
+
+from .natural_math import read_math_question, read_math_example
 
 
 @dataclass(frozen=True)
@@ -18,19 +21,19 @@ class Intent:
 
 
 def clean(text: str) -> str:
-    return re.sub(r'\s+', ' ', text.strip().strip('“”"'))
-
+    return re.sub(r'\s+', ' ', str(text).strip().strip('“”"'))
 
 
 def normalize_request(text: str) -> str:
-    """Normalise short spoken requests for stable alias matching."""
+    """Normalise a short spoken request for stable, safe intent alias matching."""
     ascii_text = unicodedata.normalize('NFKD', clean(text).casefold())
     ascii_text = ''.join(c for c in ascii_text if not unicodedata.combining(c))
     return re.sub(r'\s+', ' ', re.sub(r'[^a-z0-9 ]', ' ', ascii_text)).strip()
 
 
 def is_self_knowledge_request(text: str) -> bool:
-    return normalize_request(text) in {
+    request = normalize_request(text)
+    return request in {
         'o que sabes', 'o que e que sabes', 'o que sabes fazer',
         'o que consegues fazer', 'o que aprendeste', 'o que ja aprendeste',
         'o que tens aprendido', 'quais sao as tuas capacidades',
@@ -54,6 +57,7 @@ def _means_self_knowledge(description: str) -> bool:
     )
     return any(marker in meaning for marker in markers)
 
+
 def _topic(text: str) -> str:
     text = clean(text).rstrip('.?! ')
     return re.sub(r'^(?:o|a|os|as|um|uma)\s+', '', text, flags=re.I).strip()
@@ -68,8 +72,8 @@ def interpret(message: str, last_question: str | None = None, awaiting_explanati
     if re.fullmatch(r'(?:adeus|até logo|tchau)[!. ]*', text, re.I):
         return Intent('farewell')
 
-    # Meta-instructions describe how to interpret a phrase; they are not answers.
-    # Parse these BEFORE treating unrecognised text as a teacher explanation.
+    # Parse a spoken intent correction first, even when the brain just asked
+    # "Podes explicar-me?". The text is a *rule*, not the answer to that question.
     meta = re.match(
         r'^(?:quando\s+(?:eu\s+)?(?:te\s+)?(?:digo|disser|pergunto|perguntar)\s+)'
         r'(.+?)\s*[,;:]?\s*(?:eu\s+)?quero\s+que\s+(.+?)\s*[.!]?$',
@@ -82,9 +86,20 @@ def interpret(message: str, last_question: str | None = None, awaiting_explanati
             return Intent('intent_instruction', question=trigger, answer=desired,
                           topic='self_knowledge' if _means_self_knowledge(desired) else 'unsupported')
 
+    # Whole arithmetic queries and verified worked examples take priority over
+    # definitions and over the previous question's answer slot.
+    if read_math_question(text) is not None:
+        return Intent('math_question', question=text)
+    if read_math_example(text) is not None:
+        return Intent('math_example', question=text)
+    if normalize_request(text) in ('nao sei', 'agora nao consigo', 'nao consigo',
+                                   'nao tenho a certeza', 'nao faco ideia'):
+        return Intent('uncertain')
+
     if is_self_knowledge_request(text):
         return Intent('self_knowledge')
-    if re.search(r'^(?:como está o (?:teu )?cérebro|o que (?:já )?aprendeste|quanto (?:já )?aprendeste|mostra o teu progresso|qual é o teu progresso)\??$', text, re.I):
+
+    if re.search(r'^(?:como está o (?:teu )?cérebro|quanto (?:já )?aprendeste|mostra o teu progresso|qual é o teu progresso)\??$', text, re.I):
         return Intent('progress')
     m = re.match(r'^(?:quando (?:eu )?(?:te )?(?:perguntar|disser))\s+["“]?(.+?)["”]?\s*[,;:]\s*(?:responde|diz)\s+["“]?(.+?)["”]?[.!]?$', text, re.I)
     if m:
@@ -118,13 +133,25 @@ def interpret(message: str, last_question: str | None = None, awaiting_explanati
     fact=_fact(text)
     if fact:
         return fact
-    # An explicit explanatory response following "Podes explicar?" is teaching.
-    if awaiting_explanation and last_question and not text.endswith('?') and len(text)>=5:
-        return Intent('explanation',last_question,text)
+    if awaiting_explanation and last_question and not text.endswith('?'):
+        # Long, unstructured feedback is not automatically a correct answer.
+        # Ask for a clear response rather than poisoning long-term memory.
+        if 1 <= len(text) <= 110 and not re.search(
+            r'\b(?:quero que|quando te|quando eu|seria o mesmo|se te disser|nao sei|não sei)\b',
+            text, re.I,
+        ):
+            return Intent('explanation',last_question,text)
+        return Intent('clarify_teaching',question=last_question)
     return Intent('question',text)
 
 
 def _fact(text: str) -> Intent | None:
+    # A command or question containing 'é' is NOT a definition. In particular,
+    # 'e diz-me quanto é 2+2' must not become a concept named 'e diz-me quanto'.
+    if re.match(r'^(?:(?:e\s+)?(?:diz(?:[- ]me)?|quanto|qual|podes|como|quem|explica|porque|por\s+que|isto)\b)', text, re.I):
+        return None
+    if re.search(r'\d\s*[+*/×÷−-]\s*\d', text) or '?' in text:
+        return None
     m=re.match(r'^((?:(?:o|a|um|uma)\s+)?[\wÀ-ÿ-]+(?:[ \wÀ-ÿ-]{0,45})?)\s+(?:é|significa)\s+(.+?)[.!]?$',text,re.I)
     if not m:
         return None

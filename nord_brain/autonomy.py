@@ -10,8 +10,9 @@ import os
 import threading
 import time
 
-from .experiments import curriculum
+from .experiments import curriculum, MAX_LEVEL
 from .internet import search
+from .reasoning import math_question
 
 
 def on(name: str, default: bool=False) -> bool:
@@ -37,23 +38,31 @@ def growth_candidate(scores: list[float], steps: int, lesson_count: int,
 
 @dataclass
 class AutoSettings:
-    interval: int = 60
+    interval: int = 30
     training: bool = True
     experiments: bool = True
     growth: bool = True
     research: bool = False
     max_params: int = 3000000
     max_width: int = 1024
+    examples_per_tick: int = 4
+    world_simulations: bool = True
+    world_scenarios: int = 3
+    hypotheses_per_tick: int = 3
 
     @classmethod
     def from_env(cls):
-        return cls(interval=integer('NORD_AUTO_INTERVAL',60,5,3600),
+        return cls(interval=integer('NORD_AUTO_INTERVAL',30,5,3600),
                    training=on('NORD_AUTO_TRAIN',True),
                    experiments=on('NORD_AUTO_EXPERIMENTS',True),
                    growth=on('NORD_AUTO_GROW',True),
-                   research=on('NORD_AUTONOMOUS_RESEARCH',True) and on('NORD_INTERNET'),
+                   research=on('NORD_AUTONOMOUS_RESEARCH',True) and on('NORD_INTERNET',True),
                    max_params=integer('NORD_MAX_PARAMS',3000000,100000,10000000),
-                   max_width=integer('NORD_MAX_MLP_WIDTH',1024,128,4096))
+                   max_width=integer('NORD_MAX_MLP_WIDTH',1024,128,4096),
+                   examples_per_tick=integer('NORD_MATH_EXAMPLES_PER_TICK',4,1,12),
+                   world_simulations=on('NORD_WORLD_SIM',True),
+                   world_scenarios=integer('NORD_WORLD_SCENARIOS',3,1,10),
+                   hypotheses_per_tick=integer('NORD_HYPOTHESES_PER_TICK',3,1,8))
 
 
 class Autonomy:
@@ -95,10 +104,9 @@ class Autonomy:
                 try:
                     results=search(topic)
                     with brain.lock:
-                        for item in results:
-                            brain.memory.observation(topic,item['title'],item['url'],item['summary'])
+                        n=brain.absorb_official_sources(topic,results)
                         brain.memory.unknown_searched(topic)
-                        brain.memory.event('research',topic,float(len(results)))
+                        brain.memory.event('research',f'{topic[:75]}; source_count={len(results)}; trained={n}',float(n))
                 except Exception as e:
                     with brain.lock:
                         brain.memory.unknown_searched(topic)
@@ -106,20 +114,85 @@ class Autonomy:
         if not settings.training:
             return
         with brain.lock:
+            # Hypothesis lab follows the teacher's 2+2=4 seed: generate novel
+            # equivalent/contrast equations, predict, VERIFY, then train.
+            # Source questions and held-out math test questions are excluded.
+            for question,expected in brain.memory.pending_math_hypotheses(settings.hypotheses_per_tick):
+                if brain.memory.is_holdout(question):
+                    brain.memory.mark_math_hypothesis(question,'heldout','rejected')
+                    continue
+                proof=math_question(question)
+                checked=(proof.steps[-1].split(' = ')[-1] if proof and proof.steps else None)
+                if checked!=expected:
+                    brain.memory.mark_math_hypothesis(question,'invalid target','rejected')
+                    brain.memory.event('hypothesis_rejected',question)
+                    continue
+                before=brain.core.generate(question,max_bytes=8,temperature=0).strip()
+                brain._learn(question,expected,epochs=1,origin='verified_math_hypothesis')
+                brain.memory.mark_math_hypothesis(question,before,'trained')
+                brain.memory.metric('hypothesis_pretrain_correct',float(before==expected))
+                brain.memory.event('hypothesis_trained',f'{question} = {expected}; predicted={before[:12]}')
+            if settings.world_simulations:
+                result=brain.world.experience_cycle(scenarios=settings.world_scenarios,
+                                                    steps_per_world=12,updates=16)
+                brain.memory.event('world_training',
+                    f"scenarios={result['scenarios']}; observations={result['observations']}",
+                    result['after']['joint_loss'])
             if settings.experiments:
-                training, tests=curriculum()
-                # Only add independent test items that were not already taught.
-                for question,answer in tests:
-                    if not brain.memory.is_holdout(question):
-                        try:brain.memory.holdout(question,answer)
-                        except ValueError:pass
+                level=max(0,min(MAX_LEVEL,int(brain.memory.get_meta('math_level','0'))))
+                training, heldout=curriculum(level)
+                # Evaluation tasks are frozen, untrained, and excluded from replay.
+                available=[]
+                for question,answer in heldout:
+                    if brain.memory.is_holdout(question):
+                        available.append((question,answer))
+                    else:
+                        try:
+                            brain.memory.holdout(question,answer)
+                            available.append((question,answer))
+                        except ValueError:
+                            # Already taught in an older release: not an unseen test.
+                            pass
                 cursor=int(brain.memory.get_meta('curriculum_cursor','0'))
-                question,answer=training[cursor%len(training)]
-                if not brain.memory.is_holdout(question):
-                    brain._learn(question,answer,epochs=1,origin='verified_experiment')
-                brain.memory.set_meta('curriculum_cursor',str(cursor+1))
+                completed=[]
+                # Train on *different* procedurally generated examples each cycle.
+                # Validate targets mathematically; never use the model's own guess
+                # as the gold answer. Save once after the group for CPU efficiency.
+                brain.core.save()
+                try:
+                    for _ in range(settings.examples_per_tick):
+                        question,answer=training[cursor%len(training)]
+                        cursor+=1
+                        if brain.memory.is_holdout(question):
+                            continue
+                        loss=brain.core.train(question,answer,epochs=1)
+                        completed.append((question,answer,loss))
+                    brain.core.save()
+                except Exception:
+                    brain.core.load()
+                    raise
+                for question,answer,loss in completed:
+                    brain.memory.teach(question,answer,origin='verified_experiment')
+                    brain.memory.metric('train_loss',loss)
+                brain.memory.set_meta('curriculum_cursor',str(cursor))
+                brain.memory.event('math_training',f'level={level}; examples={len(completed)}')
+                # Independent, neural-only measurement. The symbolic verifier
+                # is NOT consulted for these predictions or counted as success.
+                if self._ticks%4==0 and len(available)>=6:
+                    probes=available[:8]
+                    correct=0
+                    for question,answer in probes:
+                        prediction=brain.core.generate(question,max_bytes=8,temperature=0).strip()
+                        correct+=prediction==answer
+                    accuracy=correct/len(probes)
+                    brain.memory.set_meta('math_neural_accuracy',f'{correct}/{len(probes)}')
+                    brain.memory.event('math_neural_eval',f'level={level}; neural_only',accuracy)
+                    # Promote only on actual unseen success, never from training loss.
+                    if accuracy>=.75 and level<MAX_LEVEL:
+                        brain.memory.set_meta('math_level',str(level+1))
+                        brain.memory.set_meta('curriculum_cursor','0')
+                        brain.memory.event('math_level_up',f'{level} -> {level+1}',accuracy)
                 # Practice compositional consequences of teacher-provided facts.
-                # Every label is derived by a bounded proof, not invented by the model.
                 if self._ticks%2==0:
                     example=brain.reasoner.derived_example(self._ticks//2)
                     if example and not brain.memory.is_holdout(example[0]):
@@ -127,7 +200,6 @@ class Autonomy:
                             brain._learn(*example,epochs=1,origin='reasoning_proof')
                             brain.memory.event('reasoning_practice','teacher-grounded deduction')
                         except ValueError as e:
-                            # A derived sentence can exceed tiny context/training limits.
                             brain.memory.event('reasoning_skipped',str(e)[:140])
             # Replay is also learning: old examples are reintroduced without an
             # extra teacher command. Keep CPU use small on 1-vCPU machines.

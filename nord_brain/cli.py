@@ -14,7 +14,9 @@ HELP='''Fala normalmente comigo. Exemplos:
   Quando eu perguntar como te chamas?, responde Nord Brain.
   Não, a resposta correta é outra.
   O que aprendeste?
-  Pesquisa sobre vulcões. (se a Internet estiver ativa)
+  Pesquisa sobre Python. (documentação oficial, Internet ativa por defeito)
+  2+2 é 4. (gera hipóteses matemáticas e treina autonomamente)
+  Simula 3 cenários.  (testa 4 ações e aprende com as consequências)
 
 Comandos técnicos opcionais: /cerebro, /avaliar, /ajuda, /sair
 A aprendizagem, a revisão e a decisão experimental de crescimento funcionam
@@ -35,6 +37,12 @@ def handle(brain,line):
         if len(parts)!=2:raise ValueError('Usa pergunta => resposta')
         with brain.lock:brain.memory.holdout(parts[0].strip(),parts[1].strip())
         return 'Teste independente guardado.'
+    if line.startswith('/simular'):
+        parts=line.split()
+        if len(parts)>2:raise ValueError('Usa /simular ou /simular 5')
+        amount=int(parts[1]) if len(parts)==2 else 3
+        if not 1<=amount<=10:raise ValueError('Entre 1 e 10 cenários')
+        return brain.simulate_world(amount)[0]
     if line=='/ajuda':return HELP
     if line=='/cerebro':return json.dumps(brain.status(),ensure_ascii=False,indent=2)
     if line=='/avaliar':
@@ -49,7 +57,7 @@ def main(argv=None):
     parser.add_argument('--data',type=Path,default=Path(os.environ.get('NORD_DATA',str(Path.home()/'.nord-brain'))))
     args=parser.parse_args(argv)
     brain=Brain(args.data)
-    print('Nord Brain v0.4 | Transformer próprio | aprendizagem autónoma experimental')
+    print('Nord Brain v0.5 | Transformer próprio | aprendizagem autónoma experimental')
     print('Fala normalmente. Escreve /ajuda para exemplos ou /sair para terminar.')
     try:
         while True:

@@ -1,8 +1,60 @@
-### Correção automática de `ensurepip` / `python3.12-venv`
+# Nord Brain V0.9 — hipóteses matemáticas e investigação com fontes primárias
 
-Em Ubuntu/Debian, se faltar `python3.X-venv`, o instalador deteta o erro `ensurepip`, tenta instalar automaticamente o pacote da mesma versão do Python com `sudo apt-get`, recria o ambiente virtual incompleto e continua a instalação. Poderá pedir a palavra-passe de `sudo`. Se o APT falhar, mostra o comando manual para recuperação. O instalador **não apaga os pesos nem a memória da Nord Brain**.
+> **Experimental:** a Nord Brain tem dois subsistemas de aprendizagem: um Transformer linguístico pequeno com pesos treináveis e uma rede pequena que prevê consequências no mundo virtual. Nenhum deles tem o conhecimento inicial de um Qwen pré-treinado. Os verificadores fazem contas corretas, mas isso **não prova que o Transformer aprendeu matemática**. O desempenho neuronal é medido apenas com perguntas que não entraram no treino.
 
-Depois de atualizar o repositório, executa:
+## Como começar a ensinar
+
+```text
+tu> 2+2 é 4
+nord> Correto: ... Registei o exemplo verificado. Preparei novas hipóteses para experimentar e aprender nos próximos ciclos.
+
+tu> 3+1
+nord> O resultado é 4. [origem: cálculo verificável; tentativa neuronal correta/incorreta]
+
+tu> o que sabes
+nord> ... Hipóteses matemáticas: X por testar, Y verificadas e treinadas ...
+```
+
+- A afirmação do professor é verificada primeiro. Se disseres `2+2 é 5`, o cérebro rejeita-a.
+- Uma conta correta desencadeia um laboratório de **hipóteses matemáticas**: diferentes somas que dão 4 (como `3+1`, `1+3`, `4+0`), subtrações, multiplicações e exemplos com resultados **diferentes** (3 e 5). O objetivo é aprender regras, não repetir sempre 4.
+- Cada hipótese é guardada numa fila SQLite, **prevista primeiro pelo Transformer**, depois avaliada pelo verificador matemático. Só as experiências verificadas atualizam os pesos. A fila sobrevive aos reinícios.
+- O ciclo autónomo continua a gerar contas com novos números, separados entre treino e testes. Um resultado do verificador não conta como um acerto neuronal; o avanço para níveis mais difíceis depende de acertos reais da rede em exemplos não vistos.
+- As experiências matemáticas continuam apenas enquanto o processo estiver aberto. Os conhecimentos do utilizador, os checkpoints e o histórico de hipóteses são persistentes.
+
+## Pesquisa autónoma na Internet — sem Wikipédia
+
+A Internet está **ativada por defeito** para investigação limitada a documentação primária selecionada. Só faz pedidos de rede quando pedes uma pesquisa ou existe uma dúvida pendente sobre um destes assuntos:
+
+| Assunto | Fonte | Tipo |
+|---|---|---|
+| Python | `docs.python.org` | Documentação oficial da linguagem |
+| Raspberry Pi | `raspberrypi.com` | Documentação do fabricante |
+| Sistema solar e planetas | `science.nasa.gov` | NASA Science |
+| Linux/kernel | `docs.kernel.org` | Documentação dos autores do kernel |
+
+**Segurança e honestidade:** o código não aceita URLs arbitrárias, redirecionamentos nem websites desconhecidos; não envia a frase completa do utilizador a motores de busca externos, não executa JavaScript e limita a leitura a 120 KB por fonte, com timeout. Guarda URL e proveniência. Um pequeno excerto oficial pode ser usado **uma única vez** para atualizar os pesos, mas não é tratado como facto confirmado por fontes independentes; a rede pode continuar a gerar erros.
+
+```bash
+# Normal: Internet oficial e treino com pequenos excertos de fontes ativados
+./nord
+
+# Desligar totalmente a Internet
+NORD_INTERNET=off ./nord
+
+# Permitir pesquisa mas impedir que o texto da fonte seja treinado
+NORD_SOURCE_TRAIN=off ./nord
+
+# Mostrar que resposta veio de cálculo, memória, dedução ou aprendizagem neuronal
+NORD_SHOW_ORIGIN=on ./nord
+```
+
+Não há pesquisa aberta no mundo inteiro, validação científica automática nem aprendizagem de todas as páginas. Para adicionar outros sites fiáveis é necessária uma revisão explícita das fontes no código. O treino sobre fontes externas é uma **experiência de aprendizagem por dados**, não uma garantia de veracidade ou fluência. A execução na Raspberry Pi continua limitada pelo CPU/RAM.
+
+## Simulador de ações
+
+Além de contas, a V0.9 inclui o `world.py` que simula uma máquina em grelha. A rede observa sensores, prevê consequências de quatro ações, experimenta uma, recebe feedback e ajusta pesos. A simulação é local e não controla motores físicos. Podes dizer `simula 3 cenários` na conversa.
+
+## Atualização
 
 ```bash
 cd ~/nord_ai_platform
@@ -10,32 +62,41 @@ git pull origin main
 bash install.sh
 ```
 
-# Nord Brain V0.4.1 — raciocínio verificável, aprendizagem autónoma e conversa pelo terminal
+Para executar a suite local: `.venv/bin/python -m unittest discover -s tests -v`. Não é necessário apagar `.venv`, os dados SQLite nem os checkpoints.
+
+---
+
+# Nord Brain V0.5 — aprendizagem autónoma com testes de generalização
+
+**Objetivo:** deixar de depender de corrigir exemplos individuais. O Transformer tenta aprender uma operação a partir de múltiplas experiências diferentes, não de uma tabela de perguntas/respostas. O treino é real (gradientes e pesos PyTorch), mas um modelo com pesos iniciados do zero pode continuar a errar mesmo depois de muitas experiências.
+
+## Como funciona a aprendizagem autónoma
+
+- Gera contas novas de forma procedural a partir de números e operações, com respostas calculadas por um verificador independente. Não existe uma lista fixa de respostas para `2+2` ou `4+4`.
+- Reserva de forma determinística parte das combinações **fora do treino**. A avaliação de competência utiliza **apenas a geração do Transformer** nesses exemplos, nunca o verificador matemático.
+- Treina em grupos de quatro exercícios por ciclo, de 30 em 30 segundos por defeito, para continuar viável numa VM de 1 vCPU. O ritmo é configurável em `NORD_MATH_EXAMPLES_PER_TICK` (1–12) e `NORD_AUTO_INTERVAL` (5–3600).
+- Depois de obter pelo menos 75% de respostas exatas em testes novos de um nível, avança para um currículo mais difícil: somas pequenas, operações até 20, números até 100 e multiplicações. Sem resultados, **não anuncia que aprendeu** nem desbloqueia o nível por tempo decorrido.
+- Ao receber `4+4`, `quanto é 4+4?` ou outras formas de pedido, o núcleo tenta calcular **pelos pesos** e confronta o seu resultado com um cálculo exato. Se falhar, responde com o cálculo verificado. Mostra `NORD_SHOW_ORIGIN=on` para distingui-los; o sucesso do verificador não é contabilizado como sucesso neuronal.
+- Mantém o sistema anterior de memória, deduções e crescimento neuronal experimental. Nenhuma pesquisa web não verificada entra automaticamente no treino.
+
+**Limites reais:** o verificador sabe fazer cálculos por programação; isso é uma ferramenta, não raciocínio emergente do modelo. Mesmo com um currículo variável e avaliação em exemplos inéditos, o Transformer muito pequeno pode não generalizar com facilidade. É necessário treino extenso, dados de qualidade, memória de longa duração e testes rigorosos para aproximar a qualidade de um LLM. A aprendizagem autónoma decorre apenas enquanto o processo Nord Brain está em execução.
+
+## Atualização
+
+```bash
+cd ~/nord_ai_platform
+git pull origin main
+bash install.sh
+```
+
+Para acompanhar a diferença entre cálculos verificados e capacidade do Transformer, executa `NORD_SHOW_ORIGIN=on ./nord` e pergunta `o que sabes`.
+
+---
+
+# Nord Brain V0.4 — raciocínio verificável, aprendizagem autónoma e conversa pelo terminal
 
 **Projeto experimental, sem pesos pré-treinados.** O cérebro é um Transformer próprio em PyTorch (atenção causal/GQA, RoPE, RMSNorm e SwiGLU) e **não usa o Qwen nem Ollama**. A arquitetura está preparada para aprender pesos, guardar experiências e experimentar expansão neuronal. **Não é equivalente a um LLM treinado; não compreende português fluentemente e não existe garantia de inteligência geral.**
 
-
-## V0.4.1 — «O que sabes?» e interpretação de frases
-
-Agora a Nord Brain responde a «O que sabes?», «O que sabes fazer?», «O que aprendeste?» e «Quais são as tuas capacidades?» com um relatório **dinâmico**, construído a partir das suas funções disponíveis, lições ensinadas pelo utilizador, relações guardadas e passos reais de treino. Não repete uma resposta fixa memorizada e distingue «O que sabes sobre a Lua?» de uma pergunta sobre si própria.
-
-Exemplo de ensino conversacional:
-
-```text
-tu> o que sabes
-nord> Neste momento, tenho estas capacidades programadas: ...
-      Algumas coisas que me ensinaste: ...
-      Estado: ... exemplos ... passos de treino neuronal.
-
-tu> quando te digo o que sabes eu quero que me digas o que sabes fazer e o que aprendeste
-nord> Percebi. Quando disseres «o que sabes», vou mostrar as minhas capacidades reais e o que já me ensinaste, em vez de repetir esta explicação.
-```
-
-Também é possível definir uma expressão alternativa, por exemplo: `Quando te digo faz o meu balanço, quero que me digas o que sabes fazer e o que aprendeste.` A associação de intenção é guardada em SQLite e funciona após reiniciar, inclusive com pequenas diferenças de maiúsculas, acentos e pontuação. **A interpretação de frases é simbólica e limitada a este tipo de pedido:** não significa que o Transformer adquiriu compreensão linguística geral, nem treina automaticamente os pesos com uma descrição que não é uma resposta factual.
-
-Uma migração estreita marca como `legacy_misinterpreted_instruction` as antigas respostas erradas ao pedido «o que sabes», quando contêm instruções como «quando te digo...». Estes registos ficam preservados no histórico da base de dados, mas deixam de ser usados para responder e treinar. Os restantes conhecimentos e checkpoints permanecem intactos.
-
-Testes específicos: `.venv/bin/python -m unittest tests.test_self_knowledge -v`.
 
 ## Novo na V0.4 — Raciocínio com provas e treino derivado
 
@@ -69,7 +130,7 @@ Também aceita relações de atributos, como `Todos os gatos têm pelo.` e a per
 - Quando existem relações suficientes do professor, o agente cria alguns exemplos de conclusões com prova e utiliza-os para treinar os pesos, com limites de contexto, tempo e recursos. **Estes dados são consequências lógicas das afirmações do utilizador, não factos científicos confirmados.**
 - A aprendizagem neuronal pode continuar a falhar em perguntas novas. Para responder com confiança a questões cobertas pelas regras, a interface utiliza o motor verificável e identifica a origem através de `NORD_SHOW_ORIGIN=on`.
 
-**Limites:** a linguagem compreendida pelo verificador é restrita (`é`, `tem`, `todos os ... são/têm`, expressões aritméticas e alguns problemas simples). Não existe compreensão geral, raciocínio humano nem verificação automática da verdade das afirmações do professor. A expansão de neurónios da V0.3 continua a ser experimental e não depende de deduções sem testes independentes. A Internet permanece separada dos dados de treino.
+**Limites:** a linguagem compreendida pelo verificador é restrita (`é`, `tem`, `todos os ... são/têm`, expressões aritméticas e alguns problemas simples). Não existe compreensão geral, raciocínio humano nem verificação automática da verdade das afirmações do professor. A expansão de neurónios da V0.3 continua a ser experimental e não depende de deduções sem testes independentes. Excertos curtos de documentação primária podem entrar no treino com origem identificada, sem serem tratados como factos confirmados.
 
 ### Testar só o raciocínio
 
@@ -77,37 +138,22 @@ Também aceita relações de atributos, como `Todos os gatos têm pelo.` e a per
 .venv/bin/python -m unittest tests.test_reasoning -v
 ```
 
-## Instalação e arranque com um único comando
-
-Se ainda não tens o projeto descarregado (Linux/Ubuntu), cola esta **linha única** no terminal:
+## Como iniciar
 
 ```bash
-git clone https://github.com/riguita-nord/nord_ai_platform.git && cd nord_ai_platform && bash install.sh
-```
-
-O instalador cria o ambiente virtual, instala PyTorch e abre imediatamente a conversa da Nord Brain. A primeira instalação requer **git, Python 3.10+, python3-venv e Internet** para descarregar dependências. Pode solicitar sudo somente para instalar o pacote Python venv em falta; não configura serviços systemd nem abre portas de rede.
-
-Se já tens o projeto, atualiza e inicia diretamente com:
-
-```bash
+git clone https://github.com/riguita-nord/nord_ai_platform.git
 cd nord_ai_platform
-git pull origin main
 bash install.sh
+.venv/bin/python -m nord_brain
 ```
 
-Para voltar a abrir a Nord Brain depois da primeira instalação, sem reinstalar:
+Para VM de 2 GB e 1 vCPU, testa o modelo mais pequeno numa pasta de dados própria:
 
 ```bash
-./nord
+NORD_BRAIN_PRESET=tiny .venv/bin/python -m nord_brain --data ./dados-tiny
 ```
 
-O comando `./nord` verifica se o ambiente existe e inicia a IA. `bash install.sh --install-only` instala sem abrir a conversa. Para escolher onde guardar a memória, executa `./nord --data ./meu-cerebro`. O estado persistente é guardado em `~/.nord-brain/` por defeito e **não é eliminado** pelo instalador. Para sair da conversa, escreve `/sair`.
-
-Em Linux com aproximadamente **3 GB de RAM ou menos**, o launcher seleciona automaticamente o perfil `tiny` para um cérebro novo, considerando também limites cgroup v2 quando disponíveis. Em máquinas maiores usa `small`. Para forçar um perfil: `NORD_BRAIN_PRESET=tiny ./nord`. Um checkpoint existente determina a arquitetura carregada, independentemente da escolha atual.
-
-A Internet da IA continua desligada por defeito. Para permitir a pesquisa limitada: `NORD_INTERNET=on ./nord`.
-
-**Limitações:** este sistema instala e abre uma sessão interativa na consola; não arranca automaticamente com o sistema operativo, nem transforma a IA num serviço. PyTorch pode ocupar bastante disco e RAM. Em computadores Windows usa WSL para estes scripts Bash.
+O Linux instala PyTorch CPU-only. Não suporta ESP32; mesmo com poucos parâmetros, o runtime PyTorch consome recursos adicionais. Um checkpoint `brain-v2.pt` existente continua a ser carregado automaticamente, preservando os pesos da V0.2. Há cópias de segurança antes de experiências de crescimento. Os checkpoints são locais e devem ser considerados ficheiros privados.
 
 ## Ensinar como numa conversa
 
@@ -142,7 +188,7 @@ O interpretador não entende qualquer frase livre: só reconhece padrões simple
 
 ## Aprendizagem realmente automática
 
-Um agente local executa um ciclo de aprendizagem por defeito a cada 60 segundos, enquanto o processo está aberto:
+Um agente local executa um ciclo de aprendizagem por defeito a cada 30 segundos, enquanto o processo está aberto:
 
 1. Escolhe um exercício simples de aritmética com resposta verificável. Um conjunto de casos separados **não é usado para ensinar**.
 2. Efetua um pequeno passo de treino dos pesos, conserva o checkpoint e revê uma experiência anterior para reduzir esquecimento.
@@ -162,11 +208,13 @@ O treino de exercícios é limitado, não envolve processos externos e utiliza u
 | `NORD_AUTO_TRAIN` | `on` | Revisão e treino periódico |
 | `NORD_AUTO_EXPERIMENTS` | `on` | Gerar experiências aritméticas verificáveis |
 | `NORD_AUTO_GROW` | `on` | Experimentar crescimento condicionado a testes |
-| `NORD_AUTO_INTERVAL` | `60` | Segundos entre ciclos (mínimo 5) |
+| `NORD_AUTO_INTERVAL` | `30` | Segundos entre ciclos (mínimo 5) |
 | `NORD_MAX_PARAMS` | `3000000` | Limite máximo de parâmetros |
 | `NORD_MAX_MLP_WIDTH` | `1024` | Limite de canais por MLP |
-| `NORD_INTERNET` | `off` | Autorizar pesquisa pública limitada |
+| `NORD_INTERNET` | `on` | Documentação primária selecionada (off para desligar) |
 | `NORD_AUTONOMOUS_RESEARCH` | `on` | Pesquisar dúvidas pendentes, mas só quando a Internet está ativa |
+| `NORD_SOURCE_TRAIN` | `on` | Permitir treino com excertos da documentação primária |
+| `NORD_HYPOTHESES_PER_TICK` | `3` | Experiências de hipóteses matemáticas por ciclo (1–8) |
 | `NORD_SHOW_ORIGIN` | `off` | Mostrar origem de cada resposta |
 | `NORD_THREADS` | `1` | Threads de CPU do PyTorch |
 
@@ -176,7 +224,7 @@ Exemplo de pesquisa com autonomia, mantendo fonte não verificada:
 NORD_INTERNET=on NORD_AUTONOMOUS_RESEARCH=on NORD_BRAIN_PRESET=tiny .venv/bin/python -m nord_brain
 ```
 
-A pesquisa usa **apenas a API da Wikipédia em português**: HTTPS, tamanho e tempo limitados, sem URL livre nem redirecionamentos. Os excertos são guardados como observações **não verificadas** e não são transformados automaticamente em exemplos de treino. Acesso livre e treino direto de qualquer página seriam inseguros e podem degradar o modelo. Internet não equivale a ter conhecimento validado.
+A pesquisa agora consulta somente páginas oficiais explicitamente autorizadas de Python, Raspberry Pi, NASA e Linux. Pequenos excertos de origem identificada podem treinar o modelo, mas não são automaticamente confirmados como verdade científica. Consultas fora desta lista não são feitas.
 
 ## Estrutura
 
@@ -190,7 +238,10 @@ nord_brain/
   reasoning.py     # Provas por relações ensinadas, hipóteses e aritmética
   storage.py       # Memória, lições, testes, eventos, estados da autonomia
   vocabulary.py    # Sementes lexicais iniciais (não pré-treinam)
-  internet.py      # Pesquisa opcional com fonte
+  internet.py      # Documentação primária com whitelist; sem Wikipédia
+  hypotheses.py    # Exploração de hipóteses matemáticas verificadas
+  natural_math.py  # Deteta contas e explicações em linguagem corrente
+  world.py         # Simulador sensoriomotor treinável em CPU
   cli.py           # Terminal conversacional
 ```
 
@@ -207,6 +258,6 @@ Os testes cobrem também inferência em várias etapas, hipóteses temporárias,
 ### Limites reais
 
 - Começar com pesos aleatórios exige **muitos dados, esforço computacional e aprendizagem validada** antes de se obter boa linguagem. Um vocabulário não substitui o pré-treino.
-- Autonomia é limitada a ações e verificadores implementados, e a leitura da Internet não ensina automaticamente os pesos.
+- Autonomia é limitada a ações e verificadores implementados. Pequenos excertos de documentação primária podem treinar os pesos (desativável), mas sem prova independente de veracidade.
 - O crescimento é condicionado a **plateau, testes separados e ganho sobre um controlo sem crescimento**, além de limites de memória; pode nunca ser aprovado, o que é desejável se não houver benefício.
 - Este programa não gere sozinho o hardware nem é um cérebro comparável ao de uma pessoa. Não corre integralmente num microcontrolador.
