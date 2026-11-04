@@ -2,6 +2,15 @@
 
 A Nord Brain mantém o Transformer experimental próprio, a matemática verificável e o laboratório de hipóteses da V1.1. **O modelo de texto continua sem pré-treino equivalente ao Qwen**, por isso é perigoso tratar palavras aleatórias como respostas. A V1.2 passa a distinguir perguntas públicas de texto ensinável e a apresentar fontes quando não tem conhecimento fundamentado.
 
+
+## Autoconhecimento e introspeção local
+
+A Nord Brain responde a perguntas naturais sobre **ela própria**: identidade, criadores do projeto, versão instalada, modelo/arquitetura, parâmetros, camadas, memória, aprendizagens, modo de treino, Internet, simulações e limitações. Exemplos: `Quem és tu?`, `Como funcionas?`, `Quantos parâmetros tens?`, `O que tens na memória?`, `Tens Internet?`, `Qual é a tua versão?`, `O que não sabes?`.
+
+As respostas usam **informações reais do programa em execução**, como `__version__`, parâmetros e configuração do Transformer, dados SQLite e estados do treino. Uma pergunta sobre si própria **não desencadeia treino automático**, não consulta a Internet desnecessariamente e não substitui respostas a perguntas sobre terceiros. O sistema distingue `O que sabes sobre ti?` de `O que sabes sobre Python?`.
+
+Este é um **relatório programático**, não consciência, compreensão livre da linguagem nem acesso privilegiado a pensamentos do modelo. Quando a Nord Brain não tem um dado verificável (por exemplo, a data exata em que foi criada), deve dizê-lo claramente. A deteção de intenções ainda é restrita; formulações não reconhecidas poderão exigir melhorias futuras.
+
 ## Resolver as perguntas do terminal
 
 ```text

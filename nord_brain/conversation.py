@@ -46,6 +46,99 @@ def is_self_knowledge_request(text: str) -> bool:
     }
 
 
+
+def self_query_kind(message: str) -> str | None:
+    """Recognise self-directed questions, not arbitrary conversation with numbers.
+
+    Explicit, bounded intent routing; it is not a language model or evidence
+    of self-awareness. Questions about OTHER subjects must bypass this router.
+    """
+    q = normalize_request(message)
+    if not q or len(q) > 130:
+        return None
+    # 'O que sabes sobre Python?' refers to external knowledge, not the agent.
+    if q != 'o que sabes sobre ti' and q.startswith(('o que sabes sobre ', 'quem e o ', 'quem e a ',
+                     'quem foi ', 'o que e o ', 'o que e a ',
+                     'qual e o nome do ', 'quantos jogadores ',
+                     'quanto e ', 'qual o resultado ')):
+        return None
+    if is_self_knowledge_request(message) or q in (
+        'fala me de ti', 'fala de ti', 'conta me tudo sobre ti',
+        'conta me sobre ti', 'diz me tudo sobre ti', 'quem es tu e o que sabes fazer',
+        'o que sabes de ti', 'o que sabes sobre ti', 'resume o que sabes sobre ti',
+        'faz um resumo sobre ti', 'apresenta te', 'descreve te',
+    ):
+        return 'summary'
+    if q in ('quem es', 'quem es tu', 'o que es', 'o que es tu',
+             'como te chamas', 'qual e o teu nome', 'diz me o teu nome',
+             'qual o teu nome', 'es uma ia', 'tu es uma inteligencia artificial',
+             'tu es um bot', 'como te identificas'):
+        return 'identity'
+    if q in ('quem te criou', 'quem e o teu criador', 'quem te desenvolveu',
+             'quem te fez', 'quem te programou', 'quem e o teu autor'):
+        return 'creator'
+    if q in ('qual e a tua versao', 'que versao es', 'que versao tens',
+             'qual a versao do teu software', 'qual e a tua versao atual',
+             'qual a tua versao', 'estas atualizada'):
+        return 'version'
+    if q in ('quando nasceste', 'quando foste criada', 'qual e a tua idade',
+             'quantos anos tens', 'quando foste desenvolvida'):
+        return 'age'
+    if q in ('onde estas', 'onde vives', 'onde estas a correr',
+             'em que servidor estas', 'onde estas alojada'):
+        return 'location'
+    if q in ('qual e o teu objetivo', 'para que serves', 'qual e a tua funcao',
+             'qual e a tua finalidade', 'porque existes', 'para que foste criada'):
+        return 'purpose'
+    if q in ('o que nao sabes', 'o que nao consegues fazer',
+             'quais sao os teus limites', 'quais sao as tuas limitacoes',
+             'em que tens dificuldades', 'quais sao as tuas fraquezas',
+             'consegues responder a tudo', 'sabes tudo'):
+        return 'limitations'
+    if q in ('como funcionas', 'como e o teu cerebro', 'como funciona o teu cerebro',
+             'que modelo usas', 'que modelo es', 'qual e a tua arquitetura',
+             'como e a tua arquitetura', 'como pensas', 'como raciocinas',
+             'como consegues raciocinar', 'tens um transformer', 'usas qwen'):
+        return 'architecture'
+    if q in ('quantos parametros tens', 'quantos neuronios tens',
+             'qual e o tamanho do teu cerebro', 'qual e o tamanho do teu modelo',
+             'quantas camadas tens', 'qual a tua capacidade neuronal',
+             'qual e o teu contexto'):
+        return 'size'
+    if q in ('tens memoria', 'como funciona a tua memoria', 'onde guardas a memoria',
+             'lembras te de mim', 'lembras te do que te disse',
+             'o que guardaste na memoria', 'o que tens na memoria',
+             'quantos conhecimentos tens', 'quantos exemplos aprendeste',
+             'o que guardas sobre mim'):
+        return 'memory'
+    if q in ('o que aprendeste hoje', 'o que aprendeste recentemente',
+             'qual foi a ultima coisa que aprendeste',
+             'quais foram as tuas ultimas aprendizagens',
+             'que coisas te ensinei', 'o que te ensinei',
+             'mostra me os conhecimentos que aprendeste'):
+        return 'learned'
+    if q in ('estas a aprender', 'aprendes sozinha', 'aprendes autonomamente',
+             'como aprendes', 'como e que aprendes', 'como treinas',
+             'estas a treinar', 'quanto ja treinaste',
+             'quantos passos de treino tens', 'consegues aprender comigo',
+             'estas em pausa', 'a tua aprendizagem esta ativa',
+             'o que estas a fazer agora'):
+        return 'training'
+    if q in ('tens internet', 'tens acesso a internet', 'consegues pesquisar na internet',
+             'consegues pesquisar', 'pesquisas na web', 'estas online',
+             'de onde vem a tua informacao', 'de onde vem o teu conhecimento'):
+        return 'internet'
+    if q in ('fazes experiencias', 'consegues simular', 'tens um mundo virtual',
+             'como funciona o teu mundo virtual', 'o que estas a experimentar',
+             'quantas simulacoes fizeste', 'quantas experiencias tens',
+             'tens hipoteses'):
+        return 'experiments'
+    if q in ('tens sentimentos', 'tens emocoes', 'es consciente',
+             'tens consciencia', 'sentes alguma coisa', 'es viva',
+             'tens vontade propria', 'tens opinioes proprias'):
+        return 'experience'
+    return None
+
 def _means_self_knowledge(description: str) -> bool:
     meaning = normalize_request(description)
     markers = (
@@ -96,8 +189,9 @@ def interpret(message: str, last_question: str | None = None, awaiting_explanati
                                    'nao tenho a certeza', 'nao faco ideia'):
         return Intent('uncertain')
 
-    if is_self_knowledge_request(text):
-        return Intent('self_knowledge')
+    self_kind = self_query_kind(text)
+    if self_kind is not None:
+        return Intent('self_knowledge', topic=self_kind)
 
     if re.search(r'^(?:como está o (?:teu )?cérebro|quanto (?:já )?aprendeste|mostra o teu progresso|qual é o teu progresso)\??$', text, re.I):
         return Intent('progress')

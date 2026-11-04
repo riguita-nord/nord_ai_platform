@@ -13,8 +13,8 @@ import threading
 from .core import NeuralCore, TransformerConfig
 from .storage import Memory
 from .vocabulary import initialize
-from .conversation import Intent, interpret, is_self_knowledge_request
-from .self_knowledge import report as self_knowledge_report
+from .conversation import Intent, interpret, is_self_knowledge_request, self_query_kind
+from .self_knowledge import report as self_knowledge_report, respond as self_knowledge_respond
 from .natural_math import read_math_question, read_math_example
 from .hypotheses import propose, explore_theories
 from .autonomy import Autonomy
@@ -223,6 +223,10 @@ class Brain:
             question=question.strip()
             self.last_question=question
             if not neural_only:
+                self_kind=self_query_kind(question)
+                if self_kind is not None:
+                    self.last_question=None
+                    return self_knowledge_respond(self,self_kind), 'autoconhecimento local verificado'
                 solved=read_math_question(question)
                 if solved is not None:
                     return self._math_reply(solved)
@@ -246,6 +250,13 @@ class Brain:
                 self.awaiting_explanation=False
                 self.last_question=None
                 return control
+            # First-person questions concern the actual running agent, not
+            # numbers, web research, or another teacher answer.
+            self_kind=self_query_kind(message)
+            if self_kind is not None:
+                self.awaiting_explanation=False
+                self.last_question=None
+                return self_knowledge_respond(self,self_kind), 'autoconhecimento local verificado'
             # Unified hypothesis lab works across independently verifiable
             # arithmetic, patterns, logic, teacher language and virtual actions.
             lab = re.fullmatch(
@@ -297,7 +308,7 @@ class Brain:
             if intent.kind=='self_knowledge':
                 self.awaiting_explanation=False
                 self.last_question=None
-                return self_knowledge_report(self.memory,self.core, internet_enabled=os.getenv('NORD_INTERNET','on').lower() not in ('off','0','false','no')), 'relatório local de capacidades e memória'
+                return self_knowledge_respond(self,intent.topic or 'summary'), 'autoconhecimento local verificado'
             if intent.kind=='uncertain':
                 return ('Tudo bem. Não vou memorizar uma dúvida como se fosse uma resposta certa. '
                         'Podes ensinar-me quando souberes?'), 'sem treino: incerteza'
