@@ -188,53 +188,61 @@ def train(brain, updates=12, *, path=None, rate=.00006):
         brain.core.save()
         trained = 0
         last_loss = None
+        accepted = False
+        regressions = []
+        after = before
+        attempts = 0
         try:
-            for n in range(updates):
-                index = cursor + n
-                if index % 12 == 0:
-                    last_loss = brain.core.train_text(corpus, updates=1, rate=rate * .65)
-                    trained += 1
-                    continue
-                pool = (teacher_replay if teacher_replay and index % 4 == 1
-                        else pools[index % len(pools)])
-                # Salta por exemplos diferentes entre sessões sem usar testes.
-                row = pool[((index * 19) // 7 + index // 3) % len(pool)]
-                question, answer = row
-                if (brain.memory.is_training_blocked(question)
-                        or brain.memory.is_holdout(question)
-                        or brain.memory.is_cognitive_probe(question)):
-                    continue
-                last_loss = brain.core.train(question, answer, epochs=1, rate=rate)
-                trained += 1
-            after = _scores(brain, groups)
-            # Pequenas oscilações são toleradas, mas não regredir
-            # significativamente em português, diálogo ou lições do professor.
             ceilings = (.05, .08, .10, .10, .05, .10, .10)
-            accepted = trained > 0 and all(
-                current is None or (math.isfinite(current) and
-                    (previous is None or current <= previous + margin))
-                for previous, current, margin in zip(before, after, ceilings))
             labels = ('linguagem', 'conversa natural', 'contexto', 'português',
                       'lições do professor', 'testes anteriores', 'diálogo multi-turno')
-            regressions = [
-                f'{label}: {old:.4f} -> {new:.4f} (limite +{margin:.2f})'
-                for label, old, new, margin in zip(labels, before, after, ceilings)
-                if new is not None and (not math.isfinite(new) or
-                    (old is not None and new > old + margin))
-            ]
+            for multiplier in (1.0, .25, .0625):
+                attempts += 1
+                brain.core.load()
+                trained = 0
+                for n in range(updates):
+                    index = cursor + n
+                    step_rate = rate * multiplier
+                    if index % 12 == 0:
+                        last_loss = brain.core.train_text(corpus, updates=1,
+                                                          rate=step_rate * .65)
+                        trained += 1
+                        continue
+                    pool = (teacher_replay if teacher_replay and index % 4 == 1
+                            else pools[index % len(pools)])
+                    row = pool[((index * 19) // 7 + index // 3) % len(pool)]
+                    question, answer = row
+                    if (brain.memory.is_training_blocked(question)
+                            or brain.memory.is_holdout(question)
+                            or brain.memory.is_cognitive_probe(question)):
+                        continue
+                    last_loss = brain.core.train(question, answer, epochs=1,
+                                                 rate=step_rate)
+                    trained += 1
+                after = _scores(brain, groups)
+                regressions = [
+                    f'{label}: {old:.4f} -> {new:.4f} (limite +{margin:.2f})'
+                    for label, old, new, margin in zip(labels, before, after, ceilings)
+                    if new is not None and (not math.isfinite(new) or
+                        (old is not None and new > old + margin))
+                ]
+                accepted = trained > 0 and not regressions
+                if accepted:
+                    break
             if accepted:
                 brain.core.save()
                 brain.memory.set_meta('language_curriculum_cursor', str(cursor + updates))
                 brain.memory.metric('language_v3_heldout_loss', after[0])
                 brain.memory.event('language_v3_training',
-                    f'update={trained}; heldout={before[0]:.4f}->{after[0]:.4f}', after[0])
+                    f'update={trained}; attempts={attempts}; heldout={before[0]:.4f}->{after[0]:.4f}', after[0])
             else:
                 brain.core.load()
                 brain.memory.event('language_v3_rejected',
-                    'Regressão nas métricas reservadas; checkpoint restaurado')
+                    'Regressão após tentativas com taxas de aprendizagem reduzidas')
             return {
                 'accepted': accepted,
                 'regressions': regressions,
+                'attempts': attempts,
                 'examples': trained,
                 'steps': brain.core.steps - start_steps if accepted else 0,
                 'before': round(before[0], 4),
