@@ -237,6 +237,13 @@ class DialogueMemory:
         rows=sorted(matching+latest,key=lambda item:item[0])
         messages=[]
         for _id,question,reply,_origin,_focus,_topic in rows:
+            # Neural dialogue context must not treat symbolic answers or
+            # previous diagnostic failures as examples of natural speech.
+            if (_origin.startswith(('cálculo', 'falha de geração neuronal',
+                                     'rede neuronal experimental', 'sem treino'))
+                    or reply.startswith(('A minha geração neuronal ainda não',
+                                          'Ainda não sei responder com confiança'))):
+                continue
             messages.append({'role':'user','content':question[:340]})
             if len(reply)>800:
                 reply=reply[:440]+'\n[resposta anterior abreviada]\n'+reply[-270:]
