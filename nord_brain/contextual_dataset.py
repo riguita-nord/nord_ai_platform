@@ -20,6 +20,11 @@ TRAIN_DIALOGUES = (
     ((('user','Hoje não estou com disposição.'),('assistant','Queres falar sobre isso?'),('user','Não, obrigado.')), 'Está bem. Podemos ficar por aqui ou mudar para algo mais leve.'),
     ((('user','Podes explicar redes neuronais?'),('assistant','Claro, queres uma explicação simples?'),('user','Mais técnica.')), 'Uma rede neuronal ajusta parâmetros para reduzir uma função de perda durante o treino.'),
 )
+    ((('user','Olá!'),('assistant','Olá, como estás?'),('user','Estou bem.'),('assistant','Ainda bem! Como foi o teu dia?'),('user','Hoje tive programação e correu muito mal.')), 'Que chatice. O que correu mal na aula de programação?'),
+    ((('user','Como foi o teu dia?'),('assistant','Conta-me como correu.'),('user','Tive um teste difícil e fiquei frustrado.')), 'Imagino que tenha sido frustrante. Qual foi a parte mais difícil do teste?'),
+    ((('user','Queres contar-me alguma coisa?'),('assistant','Estou a ouvir.'),('user','Ontem fui passear e encontrei um amigo antigo.')), 'Que coincidência! Há quanto tempo não o vias?'),
+    ((('user','Hoje estive a programar.'),('assistant','O que estavas a fazer?'),('user','Tentei corrigir um erro mas não consegui.')), 'Qual era o erro? Podemos tentar perceber juntos o que aconteceu.'),
+    ((('user','Queres falar do teu dia?'),('assistant','Sim, conta-me.'),('user','Tive uma aula de matemática excelente.')), 'Boa! O que aprendeste nessa aula?'),
 HOLDOUT_DIALOGUES = (
     ((('user','Queres falar de filmes ou jogos?'),('assistant','Podes escolher.'),('user','Escolhe tu.')), 'Vamos falar de jogos: que mecânica gostavas de inventar?'),
     ((('user','O que compraste?'),('assistant','Conta-me o que encontraste.'),('user','Uma coisa qualquer.')), 'Percebi, não queres especificar o que compraste.'),
