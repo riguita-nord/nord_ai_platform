@@ -27,6 +27,7 @@ from .creative import creative_request, story
 from .language_backend import LocalLanguage  # legacy, explicit opt-in only
 from .native_language import NativeLanguage
 from .intent_learning import NeuralIntent
+from .context_intent import ContextIntent
 from .story_studio import StoryStudio, BookCommand, parse_book_command
 from .dialogue import DialogueMemory, followup_kind
 from .story_revision import revise_story
@@ -63,6 +64,7 @@ class Brain:
         # Neural classification of contextual revisions, separate from facts.
         # This small supervised head is part of Nord Brain (no external LLM).
         self.intent=NeuralIntent(self.data_dir)
+        self.context_intent=ContextIntent(self.data_dir)
         # Every reply, including symbolic reasoning and web research, now
         # becomes context for the local language model and survives restart.
         self.language.context_provider=self.dialogue.context_messages
@@ -284,16 +286,17 @@ class Brain:
                 self.dialogue.add(message, reply, 'feedback de conversa (sem treino)',
                                   'dialogue', message.strip()[:240])
                 return reply, 'feedback de conversa (sem treino)'
-            # An acknowledgement is not a request to discuss the previous
-            # reply. Avoid turning "tudo bem" into a recursive explanation.
-            if not message.strip().endswith('?') and normalized in ('tudo bem', 'estou bem', 'sim tudo bem', 'bem obrigado',
-                              'tudo otimo', 'tudo tranquilo', 'ta tudo bem'):
-                self.awaiting_explanation = False
-                self.last_question = None
-                reply = 'Ainda bem! Queres conversar sobre alguma coisa?'
-                self.dialogue.add(message, reply, 'conversa quotidiana (interface)',
-                                  'dialogue', message.strip()[:240])
-                return reply, 'conversa quotidiana (interface)'
+            if previous and normalized in ('tudo bem', 'estou bem', 'sim tudo bem', 'bem obrigado', 'tudo otimo', 'tudo tranquilo', 'ta tudo bem', 'esta bem'):
+                intent, confidence = self.context_intent.predict(previous['reply'], message)
+                if intent is not None:
+                    replies = {'answer': 'Ainda bem! Como correu o teu dia?',
+                               'question': 'Estou por aqui e pronto para conversar. E contigo?',
+                               'acknowledge': 'Combinado. Queres avançar?'}
+                    reply = replies[intent]
+                    self.awaiting_explanation = False
+                    self.last_question = None
+                    self.dialogue.add(message, reply, 'intenção neuronal; resposta de interface', 'dialogue', message.strip()[:240])
+                    return reply, 'intenção neuronal; resposta de interface'
             kind = followup_kind(message)
             # Neural head interprets unexpected phrasing against the active
             # subject; it can override a generic heuristic, but never an
