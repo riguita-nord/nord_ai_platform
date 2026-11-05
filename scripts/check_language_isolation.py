@@ -4,6 +4,10 @@ Run from the repository root: .venv/bin/python scripts/check_language_isolation.
 """
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import sys
+
+# Allow direct execution from scripts/ without installing the package.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from nord_brain.runtime import Brain
 from nord_brain.linguistic_training import evaluate
