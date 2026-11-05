@@ -508,6 +508,16 @@ class Brain:
     def _chat_impl(self,message: str) -> tuple[str,str]:
         """Teacher-facing conversation. Intents are explicit, limited heuristics."""
         with self.lock:
+            if message.strip().startswith('/importar-corpus '):
+                from .corpus_import import import_text
+                url=message.strip().split(None,1)[1]
+                try:
+                    path,metadata=import_text(url,self.data_dir/'corpus_importado')
+                except (ValueError,OSError) as exc:
+                    return f'Importação recusada: {exc}', 'importação de corpus'
+                return (f'Fonte descarregada para {path}. Ainda não foi treinada. '
+                        f'Revê o ficheiro e usa /treinar-linguagem 48 {path} '
+                        f'para aprovar o treino.'), 'importação de corpus'
             control=route_control(self,message)
             if control is not None:
                 self.awaiting_explanation=False
