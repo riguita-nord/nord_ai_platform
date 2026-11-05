@@ -21,6 +21,7 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "rebuild_language.py"
+COLLECTOR = ROOT / "scripts" / "dataset_manager.py"
 PAGE = ROOT / "scripts" / "trainer_ui.html"
 DATASET = ROOT / "training" / "dataset" / "train.txt"
 
@@ -40,7 +41,7 @@ def main():
     data_dir = args.data_dir.expanduser().resolve()
     data_dir.mkdir(parents=True, exist_ok=True)
     log_path = data_dir / "trainer.log"
-    state = {"process": None, "last_exit": None}
+    state = {"process": None, "last_exit": None, "kind": None}
     guard = threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
@@ -82,7 +83,7 @@ def main():
                     running = process is not None and process.poll() is None
                     code = process.poll() if process is not None else state["last_exit"]
                 lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-70:] if log_path.exists() else []
-                self.send_json(200, {"running": running, "exit_code": code,
+                self.send_json(200, {"running": running, "kind": state["kind"] if running else None, "exit_code": code,
                                      "log": "\n".join(lines),
                                      "dataset_bytes": DATASET.stat().st_size if DATASET.exists() else 0})
                 return
@@ -100,6 +101,28 @@ def main():
                 payload = json.loads(self.rfile.read(length)) if length else {}
                 if not isinstance(payload, dict):
                     raise ValueError("Invalid request")
+                if path == "/api/collect":
+                    target_mb = int(payload.get("target_mb", 10))
+                    delay = float(payload.get("delay", 10))
+                    if not 1 <= target_mb <= 400 or not 3 <= delay <= 3600:
+                        raise ValueError("Invalid collection settings")
+                    with guard:
+                        process = state["process"]
+                        if process is not None and process.poll() is None:
+                            self.send_json(409, {"error": "Já existe uma operação em execução"})
+                            return
+                        cmd = [sys.executable, "-u", str(COLLECTOR),
+                               "--target-mb", str(target_mb), "--delay", str(delay),
+                               "--accept-cc-by-sa"]
+                        with log_path.open("w", encoding="utf-8") as logfile:
+                            state["process"] = subprocess.Popen(
+                                cmd, cwd=ROOT, stdin=subprocess.DEVNULL,
+                                stdout=logfile, stderr=subprocess.STDOUT,
+                                start_new_session=True)
+                            state["kind"] = "collect"
+                            state["last_exit"] = None
+                    self.send_json(202, {"started": True, "kind": "collect"})
+                    return
                 if path == "/api/start":
                     steps = int(payload.get("steps", 1000))
                     ratio = float(payload.get("text_ratio", .75))
@@ -124,13 +147,14 @@ def main():
                                 stdout=logfile, stderr=subprocess.STDOUT,
                                 start_new_session=True)
                             state["last_exit"] = None
+                            state["kind"] = "train"
                     self.send_json(202, {"started": True})
                     return
                 if path == "/api/stop":
                     with guard:
                         process = state["process"]
                         if process is None or process.poll() is not None:
-                            self.send_json(409, {"error": "Não existe treino ativo"})
+                            self.send_json(409, {"error": "Não existe operação ativa"})
                             return
                         # SIGINT allows the trainer to finish its current step.
                         # The last saved checkpoint remains durable.
