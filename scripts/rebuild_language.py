@@ -56,11 +56,11 @@ def main():
     checkpoint = root/"language-v1.pt"
     # The normal Brain runtime should never run concurrently with this trainer.
     import fcntl
-    with (root/"language-training.lock").open("a+") as lock:
+    with (root/".nord-instance.lock").open("a+") as lock:
         try:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise SystemExit("Another language trainer is running")
+            raise SystemExit("Nord or another trainer is running. Stop ./nord before training.")
         if args.reset and checkpoint.exists():
             archive = root / ("language-v1.backup-" + time.strftime("%Y%m%d-%H%M%S") + ".pt")
             shutil.copy2(checkpoint, archive)
