@@ -21,3 +21,10 @@ def test_social_reply_never_requests_fact_training():
         assert reply
         assert 'pesquise fontes' not in reply
         assert 'Podes ensinar-me' not in reply
+
+
+def test_anything_as_topic():
+    from nord_brain.social_dialogue import conversational_answer
+    prior='Sobre o que te apetece falar?'
+    assert conversational_answer('sobre qualquer coisa', prior)
+    assert conversational_answer('sobre tudo', prior)
