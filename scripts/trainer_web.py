@@ -7,6 +7,9 @@ and a trusted private network; HTTP is not encrypted.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import shutil
+import time
 import hmac
 import json
 import os
@@ -41,6 +44,8 @@ def main():
     data_dir = args.data_dir.expanduser().resolve()
     data_dir.mkdir(parents=True, exist_ok=True)
     log_path = data_dir / "trainer.log"
+    feedback_path = data_dir / "trainer-feedback.jsonl"
+    checkpoint = data_dir / "language-v1.pt"
     state = {"process": None, "last_exit": None, "kind": None}
     guard = threading.Lock()
 
@@ -56,6 +61,8 @@ def main():
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("X-Frame-Options", "DENY")
             self.end_headers()
             self.wfile.write(body)
 
@@ -67,6 +74,8 @@ def main():
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(html)))
                 self.send_header("Cache-Control", "no-store")
+                self.send_header("Referrer-Policy", "no-referrer")
+                self.send_header("X-Frame-Options", "DENY")
                 self.send_header("Content-Security-Policy",
                                  "default-src 'none'; style-src 'unsafe-inline'; "
                                  "script-src 'unsafe-inline'; connect-src 'self'; "
@@ -85,7 +94,10 @@ def main():
                 lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-70:] if log_path.exists() else []
                 self.send_json(200, {"running": running, "kind": state["kind"] if running else None, "exit_code": code,
                                      "log": "\n".join(lines),
-                                     "dataset_bytes": DATASET.stat().st_size if DATASET.exists() else 0})
+                                     "dataset_bytes": DATASET.stat().st_size if DATASET.exists() else 0,
+                                     "checkpoint_bytes": checkpoint.stat().st_size if checkpoint.exists() else 0,
+                                     "feedback_count": sum(1 for _ in feedback_path.open(encoding="utf-8")) if feedback_path.exists() else 0,
+                                     "checkpoints": [{"name": p.name, "bytes": p.stat().st_size} for p in sorted(data_dir.glob("language-v1.backup-*.pt"), reverse=True)[:20]]})
                 return
             self.send_json(404, {"error": "Not found"})
 
@@ -101,6 +113,17 @@ def main():
                 payload = json.loads(self.rfile.read(length)) if length else {}
                 if not isinstance(payload, dict):
                     raise ValueError("Invalid request")
+                if path == "/api/feedback":
+                    prompt = payload.get("prompt", "")
+                    answer = payload.get("answer", "")
+                    if not isinstance(prompt, str) or not isinstance(answer, str) or not 2 <= len(prompt.strip()) <= 2000 or not 2 <= len(answer.strip()) <= 4000:
+                        raise ValueError("Pergunta ou resposta inválida")
+                    record = {"prompt": prompt.strip(), "answer": answer.strip(), "approved": True, "timestamp": int(time.time())}
+                    with guard:
+                        with feedback_path.open("a", encoding="utf-8") as f:
+                            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+                    self.send_json(201, {"saved": True, "note": "Exemplo aprovado guardado; ainda não incluído no treino"})
+                    return
                 if path == "/api/collect":
                     target_mb = int(payload.get("target_mb", 10))
                     delay = float(payload.get("delay", 10))
