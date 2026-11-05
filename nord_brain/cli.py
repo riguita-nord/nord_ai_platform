@@ -29,6 +29,8 @@ HELP='''Fala normalmente comigo. Exemplos:
   Pausa aprendizagem. / Retoma aprendizagem.
 
 Comandos técnicos opcionais: /cerebro, /avaliar, /ajuda, /sair
+  /treinar-linguagem [12] [ficheiro.txt]  (treino misto de frases, diálogos e texto PT-PT)
+  /avaliar-linguagem     (avaliação independente da linguagem e do contexto)
   /treinar-portugues 20    (treino REAL nos pesos, CPU, com avaliação separada)
   /treinar-texto <ficheiro.txt> [6]  (treino de texto corrido que TU aprovas)
   /gerar-neural <tema>    (ver saída direta do teu Transformer, sem verificadores)
@@ -79,6 +81,23 @@ def handle(brain,line):
         domain=parts[1] if len(parts)>1 else 'tudo'
         amount=int(parts[2]) if len(parts)>2 else 1
         return brain.simulate_cognition(domain,amount)[0]
+    if line.startswith('/treinar-linguagem'):
+        from .linguistic_training import train, describe
+        args=shlex.split(line)
+        if len(args)>3:
+            raise ValueError('Usa /treinar-linguagem [1-48] [ficheiro.txt]')
+        updates=int(args[1]) if len(args)>=2 else 12
+        path=args[2] if len(args)==3 else None
+        return describe(train(brain, updates, path=path))
+    if line=='/avaliar-linguagem':
+        from .linguistic_training import evaluate
+        result=evaluate(brain)
+        return (f"Português e frases novas: perda {result['language_loss']} "
+                f"em {result['heldout']} exemplos reservados. "
+                f"Diálogo natural: {result['natural_loss']}; "
+                f"contexto: {result['context_loss']}; "
+                f"português anterior: {result['portuguese_loss']}. "
+                'São perdas de previsão, não uma garantia de fluência.')
     if line.startswith('/treinar-portugues'):
         from .portuguese_training import train, describe
         parts=line.split()
