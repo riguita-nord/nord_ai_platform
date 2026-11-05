@@ -28,7 +28,7 @@ from .language_backend import LocalLanguage  # legacy, explicit opt-in only
 from .native_language import NativeLanguage
 from .intent_learning import NeuralIntent
 from .context_intent import ContextIntent
-from .social_dialogue import social_act, social_response
+from .social_dialogue import social_act, social_response, conversational_answer
 from .story_studio import StoryStudio, BookCommand, parse_book_command
 from .dialogue import DialogueMemory, followup_kind
 from .story_revision import revise_story
@@ -291,6 +291,13 @@ class Brain:
             # Unlike exact-phrase matching, this handles "tou bem e tu?" and
             # informal variants. The neural classifier remains available for
             # ambiguous turns; neither mechanism claims free-form fluency.
+            topic_reply = conversational_answer(message, previous['reply'] if previous else '')
+            if previous and topic_reply:
+                self.awaiting_explanation = False
+                self.last_question = None
+                self.dialogue.add(message, topic_reply, 'continuidade de conversa',
+                                  'dialogue', message.strip()[:240])
+                return topic_reply, 'continuidade de conversa'
             act = social_act(message, previous['reply'] if previous else '')
             if previous and act is not None:
                 if act in ('answer', 'question', 'acknowledge'):
