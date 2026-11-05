@@ -32,6 +32,8 @@ def parse():
                         help="Archive previous experimental checkpoint and start from random weights")
     parser.add_argument("--rate", type=float, default=0.0002)
     parser.add_argument("--save-every", type=int, default=50)
+    parser.add_argument("--preview", action="store_true",
+                        help="Print raw unseen generations after training")
     return parser.parse_args()
 
 
@@ -101,6 +103,11 @@ def main():
                 score = core.score(HOLDOUT)
                 print(json.dumps({"step": core.steps, "train_loss": round(loss, 4),
                                   "holdout_loss": round(score, 4)}, ensure_ascii=False), flush=True)
+        if args.preview:
+            for prompt in ("Tu: Olá", "Tu: Como estás hoje?",
+                           "Tu: Podemos conversar sobre uma ideia nova?"):
+                answer = core.generate(prompt, max_bytes=140, temperature=0, dialogue=True)
+                print(f"PREVIEW {prompt!r}: {answer!r}", flush=True)
         print("Training finished. Test actual unseen conversations before treating the model as ready.", flush=True)
 
 
