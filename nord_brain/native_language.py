@@ -123,7 +123,14 @@ class NativeLanguage:
         count=max(1,min(4,int(os.getenv('NORD_CANDIDATES','2'))))
         candidates=[core.generate(question,max_bytes=budget,temperature=temperature,dialogue=True)
                     for _ in range(count)]
-        return choose_candidate(candidates,question)
+        selected=choose_candidate(candidates,question)
+        # Opt-in raw-generation diagnostics: never train on these samples.
+        if os.getenv('NORD_DEBUG_GENERATION', '').lower() in ('1','true','yes','on'):
+            import sys
+            print(f'[nord/neural] steps={core.steps} layers={core.model.config.layers} '
+                  f'prompt={question!r} candidates={candidates!r} '
+                  f'selected={selected!r}', file=sys.stderr)
+        return selected
 
     def status(self) -> str:
         return ('Nord Transformer próprio (CPU, pesos treináveis); '
