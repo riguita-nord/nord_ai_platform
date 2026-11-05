@@ -64,6 +64,14 @@ class Brain:
         if self.core.model.config.context != 512:
             self.core.model.config.context = 512
             self.core.save()
+        # Independent language weights: autonomous mathematics must not overwrite
+        # the conversational model. Copy the existing checkpoint once for
+        # migration; never delete lessons, dialogue or the original weights.
+        language_checkpoint = self.data_dir/'language-v1.pt'
+        if not language_checkpoint.exists():
+            import shutil
+            shutil.copy2(self.data_dir/'brain-v2.pt', language_checkpoint)
+        self.language_core=NeuralCore(language_checkpoint, config=self.core.model.config)
         self.reasoner=ReasoningEngine(self.memory)
         # Separate CPU-trainable predictive brain for sensorimotor experiences.
         # Its weights are trained from transitions, never injected via chat context.
