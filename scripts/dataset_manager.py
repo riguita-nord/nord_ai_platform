@@ -33,10 +33,30 @@ def fetch(params, attempts=4):
             req = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
             with urlopen(req, timeout=35) as response:
                 return json.load(response)
-        except (HTTPError, URLError, TimeoutError, ValueError) as exc:
+        except HTTPError as exc:
+            if exc.code == 429:
+                # Respect Retry-After and stop after bounded retries; do not
+                # rotate identities, proxies, or evade Wikimedia rate limits.
+                raw = exc.headers.get("Retry-After", "") if exc.headers else ""
+                try:
+                    delay = max(60, min(900, int(raw)))
+                except (ValueError, TypeError):
+                    delay = min(300, 60 * (n + 1))
+                if n == attempts - 1:
+                    raise RuntimeError(
+                        "Wikipedia HTTP 429: limite de pedidos atingido. "
+                        "Recomeça mais tarde; os artigos guardados serão reutilizados."
+                    ) from exc
+                print(f"HTTP 429: a aguardar {delay}s antes de repetir...", file=sys.stderr, flush=True)
+                time.sleep(delay)
+                continue
+            if n == attempts - 1 or exc.code in (400, 401, 403, 404):
+                raise RuntimeError(f"Wikipedia API unavailable: {exc}") from exc
+            time.sleep(min(30, 3 * (n + 1)))
+        except (URLError, TimeoutError, ValueError) as exc:
             if n == attempts - 1:
                 raise RuntimeError(f"Wikipedia API unavailable: {exc}") from exc
-            time.sleep(min(12, 2 ** n))
+            time.sleep(min(30, 3 * (n + 1)))
     raise RuntimeError("Unreachable")
 
 
@@ -68,12 +88,14 @@ def main():
     p.add_argument("--output", type=Path, default=Path("training/dataset"))
     p.add_argument("--target-mb", type=int, default=10)
     p.add_argument("--max-requests", type=int, default=5000)
+    p.add_argument("--delay", type=float, default=5.0,
+                   help="Seconds between API requests (minimum 3)")
     p.add_argument("--accept-cc-by-sa", action="store_true",
                    help="Acknowledge CC BY-SA 4.0 attribution/share-alike obligations")
     args = p.parse_args()
     if not args.accept_cc_by_sa:
         p.error("Wikipedia content requires explicit --accept-cc-by-sa")
-    if not 1 <= args.target_mb <= 400 or not 1 <= args.max_requests <= 100000:
+    if not 1 <= args.target_mb <= 400 or not 1 <= args.max_requests <= 100000 or not 3 <= args.delay <= 3600:
         p.error("Invalid target size or request count")
     out = args.output.expanduser()
     out.mkdir(parents=True, exist_ok=True)
@@ -135,12 +157,13 @@ def main():
                 accepted += 1
                 if bytes_written >= target:
                     break
+            train.flush()
+            evaluation.flush()
+            manifest.flush()
             if (n + 1) % 10 == 0:
-                train.flush()
-                evaluation.flush()
-                manifest.flush()
                 print(f"Requests={n+1} pages={accepted} bytes={bytes_written}", flush=True)
-            time.sleep(0.4)
+            if bytes_written < target:
+                time.sleep(args.delay)
     readme = out / "README-LICENSE.txt"
     readme.write_text(
         "Source: Portuguese Wikipedia (mixed PT-PT/PT-BR).\n"
