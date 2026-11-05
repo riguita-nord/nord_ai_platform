@@ -28,6 +28,39 @@ def score_candidate(candidate, prompt):
             return None
         if len(words) > 1 and sum(len(w) == 1 for w in words) > 1:
             return None
+        # A tiny byte-level model frequently emits isolated numbers and
+        # plausible-looking fragments (e.g. "e diz1." or "quanto diz-me 2.").
+        # Do not treat them as successful conversation.
+        if re.search(r'\\d', value):
+            return None
+        if re.search(r'(?i)\\b(?:diz-me|quanto|que|como)\\s*
+    topic = set(re.findall(r'\w{4,}', prompt.casefold()))
+    overlap = len(set(words) & topic)
+    repetition = len(words) - len(set(words))
+    return overlap * 2 - repetition - max(0, len(words) - 45) * .1
+
+
+def choose_candidate(candidates, prompt):
+    ranked = [(score_candidate(value, prompt), value) for value in candidates]
+    valid = [(score, value) for score, value in ranked if score is not None]
+    return max(valid, key=lambda row: row[0])[1] if valid else None
+, value):
+            return None
+        from .native_language import coherent_sample
+        # Short replies cannot pass the longer-sentence heuristic; instead
+        # require recognizable PT-PT conversational words, not random syllables.
+        common = {'olá','oi','boas','sim','não','claro','bem','obrigado',
+                  'obrigada','estou','aqui','tudo','contigo','comigo',
+                  'podes','posso','vamos','falar','conversar','sobre',
+                  'quero','queres','como','estás','hoje','bom','dia',
+                  'boa','tarde','noite','percebo','entendo','certo',
+                  'isso','é','uma','ideia','qual','o','a','de','e','tu'}
+        if not any(word in common for word in words):
+            return None
+        # Reject single-character-heavy fragments; a real short greeting
+        # can be a single recognized word.
+        if len(words) >= 2 and sum(len(w) == 1 for w in words) > 0 and len(words) <= 3:
+            return None
     topic = set(re.findall(r'\w{4,}', prompt.casefold()))
     overlap = len(set(words) & topic)
     repetition = len(words) - len(set(words))
