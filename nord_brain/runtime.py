@@ -267,6 +267,33 @@ class Brain:
         """
         with self.lock:
             previous = self.dialogue.latest()
+            # A correction of the assistant is feedback, never a new lesson
+            # or a request to elaborate its last (possibly broken) answer.
+            from .dialogue import normalize
+            normalized = normalize(message).strip()
+            correction = (normalized.startswith(('ta mal', 'esta mal', 'isso esta errado',
+                          'nao era isso', 'nao e isso', 'resposta errada', 'respondeste mal'))
+                          or ('nao' in normalized and 'responder' in normalized
+                              and 'isso' in normalized))
+            if correction:
+                self.awaiting_explanation = False
+                self.last_question = None
+                reply = ('Percebi que a minha resposta anterior não foi adequada. '
+                         'Não vou repeti-la nem tratá-la como uma lição. '
+                         'Podes indicar como esperavas que eu respondesse?')
+                self.dialogue.add(message, reply, 'feedback de conversa (sem treino)',
+                                  'dialogue', message.strip()[:240])
+                return reply, 'feedback de conversa (sem treino)'
+            # An acknowledgement is not a request to discuss the previous
+            # reply. Avoid turning "tudo bem" into a recursive explanation.
+            if normalized in ('tudo bem', 'estou bem', 'sim tudo bem', 'bem obrigado',
+                              'tudo otimo', 'tudo tranquilo', 'ta tudo bem'):
+                self.awaiting_explanation = False
+                self.last_question = None
+                reply = 'Ainda bem! Queres conversar sobre alguma coisa?'
+                self.dialogue.add(message, reply, 'conversa quotidiana (interface)',
+                                  'dialogue', message.strip()[:240])
+                return reply, 'conversa quotidiana (interface)'
             kind = followup_kind(message)
             # Neural head interprets unexpected phrasing against the active
             # subject; it can override a generic heuristic, but never an
@@ -453,10 +480,11 @@ class Brain:
                 return output,'continuidade contextual com Transformer Nord (experimental)'
             # Avoid claiming the scratch-trained Transformer understands a
             # reference to material it has not learned to paraphrase.
-            return ('Estávamos a falar de «'+(previous.get('topic') or previous['question'])[:140]+'». '
-                    'A minha resposta anterior foi: '+previous['reply'][:420]
-                    +'\nPosso aprofundar com o modelo linguístico local ativo; '
-                    'ainda não consigo garantir uma explicação nova.'), \
+            # Do not echo the previous answer into the next answer: it
+            # causes exponential repetition on "faz isso" / "explica melhor".
+            return ('Percebi que queres continuar ou reformular a resposta. '
+                    'Ainda não consigo gerar essa explicação com fiabilidade. '
+                    'Podes indicar o ponto específico que queres desenvolver?'), \
                    'continuidade contextual com recursos neuronais ainda insuficientes'
         return None
 
