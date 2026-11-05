@@ -225,9 +225,13 @@ def train(brain, updates=12, *, path=None, rate=.00006):
                             or brain.memory.is_holdout(question)
                             or brain.memory.is_cognitive_probe(question)):
                         continue
-                    last_loss = brain.core.train(question, answer, epochs=1,
-                                                 rate=step_rate,
-                                                 dialogue=question.startswith('Tu: '))
+                    # Use the same dialogue serialization as live inference.
+                    # Previously ordinary PT examples trained "Pergunta/Resposta"
+                    # while inference always requested "Tu/Nord".
+                    dialogue_question = (question if question.startswith('Tu: ')
+                                         else 'Tu: ' + question)
+                    last_loss = brain.core.train(dialogue_question, answer, epochs=1,
+                                                 rate=step_rate, dialogue=True)
                     trained += 1
                     # Conservative weight anchoring prevents rapid drift.
                     # This is a lightweight L2-style approximation, not EWC.
