@@ -82,7 +82,6 @@ def suggest_topic(dialogue) -> str:
     previous=dialogue.latest()
     last=previous['reply'] if previous else ''
     # Avoid repeating the immediately preceding topic even after a restart.
-    for item in topics:
-        if item != last:
-            return item
+    if last in topics:
+        return topics[(topics.index(last) + 1) % len(topics)]
     return topics[0]
