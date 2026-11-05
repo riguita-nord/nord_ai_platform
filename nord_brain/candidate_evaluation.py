@@ -12,11 +12,11 @@ def score_candidate(candidate, prompt):
     value = ' '.join(str(candidate).split())
     if not value or len(value) > 440:
         return None
-    if re.search(r'[\\x00-\\x1f\\ufffd]', value):
+    if re.search(r'[\x00-\x1f\ufffd]', value):
         return None
-    if re.search(r'(?:pergunta:|resposta:|<\\|end\\|>|<unk>|###)', value, re.I):
+    if re.search(r'(?:pergunta:|resposta:|<\|end\|>|<unk>|###)', value, re.I):
         return None
-    words = re.findall(r'\\w+', value.casefold(), re.UNICODE)
+    words = re.findall(r'\w+', value.casefold(), re.UNICODE)
     if not words or sum(ch.isalpha() for ch in value) / max(1, len(value)) < .55:
         return None
     # Short answers are legitimate. Previously ALL replies under six words
@@ -28,7 +28,7 @@ def score_candidate(candidate, prompt):
             return None
         if len(words) > 1 and sum(len(w) == 1 for w in words) > 1:
             return None
-    topic = set(re.findall(r'\\w{4,}', prompt.casefold()))
+    topic = set(re.findall(r'\w{4,}', prompt.casefold()))
     overlap = len(set(words) & topic)
     repetition = len(words) - len(set(words))
     return overlap * 2 - repetition - max(0, len(words) - 45) * .1
