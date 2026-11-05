@@ -118,11 +118,13 @@ class NativeLanguage:
         if len(encoded)>prompt_budget:
             question=encoded[-prompt_budget:].decode('utf-8','ignore')
         budget=min(125,max(42,int(max_tokens)),max(42,core.model.config.context//2))
-        temperature=.82 if creative else .61
+        temperature=.72 if creative else .40
         from .candidate_evaluation import choose_candidate
-        count=max(1,min(4,int(os.getenv('NORD_CANDIDATES','2'))))
-        candidates=[core.generate(question,max_bytes=budget,temperature=temperature,dialogue=True)
-                    for _ in range(count)]
+        count=max(1,min(6,int(os.getenv('NORD_CANDIDATES','4'))))
+        candidates=[core.generate(question,max_bytes=budget,
+                                  temperature=(0 if i == 0 else temperature),
+                                  dialogue=True)
+                    for i in range(count)]
         selected=choose_candidate(candidates,question)
         # Opt-in raw-generation diagnostics: never train on these samples.
         if os.getenv('NORD_DEBUG_GENERATION', '').lower() in ('1','true','yes','on'):
