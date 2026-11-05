@@ -53,3 +53,21 @@ multi-tenant SaaS service.
 The underlying model remains an eight-layer byte-token Transformer trained
 on CPU. The dashboard does not make it fluent by itself. No automatic
 internet scraping or unsupervised self-training is performed.
+
+## New dashboard navigation
+
+The browser now starts at a dedicated token login. After login, the sidebar
+provides Dashboard, Model, Training, Internet, Datasets, Professor, Evaluation,
+Checkpoints, and Settings. Professor examples are saved as approved records in
+`~/.nord-brain/trainer-feedback.jsonl` and are **not yet used for gradient updates**.
+The evaluation page shows existing training logs; it is **not** a separate
+benchmark. Checkpoints are listed but cannot yet be restored from the UI.
+
+## Production release gates
+
+This version has **not** been integration-tested on the target VM and is not
+certified production-ready. Before public deployment, implement TLS, hardened
+sessions and CSRF protection, persistent job supervision/recovery, log rotation,
+resource limits, tests for interrupted jobs and dataset integrity, and a proper
+review/import path for Professor examples. Until then restrict to a trusted
+private LAN or loopback and take backups of the model directory.
