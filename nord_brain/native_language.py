@@ -105,7 +105,7 @@ class NativeLanguage:
         # slow autoregressive attempt at every question until sufficient
         # actual weight updates exist. This is a budget gate, not a fluency test.
         minimum=max(0,int(os.getenv('NORD_NATIVE_MIN_STEPS','80')))
-        core=self.brain.core
+        core=self.brain.language_core
         if core.steps<minimum:
             return None
         history=(self.context_provider(prompt) if remember and
