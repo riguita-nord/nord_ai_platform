@@ -286,7 +286,14 @@ class Brain:
                 self.dialogue.add(message, reply, 'feedback de conversa (sem treino)',
                                   'dialogue', message.strip()[:240])
                 return reply, 'feedback de conversa (sem treino)'
-            if previous and normalized in ('tudo bem', 'estou bem', 'sim tudo bem', 'bem obrigado', 'tudo otimo', 'tudo tranquilo', 'ta tudo bem', 'esta bem'):
+            # Broad social-turn routing; the neural model determines the
+            # meaning using the preceding reply, not an exact phrase match.
+            social_words = {'bem', 'tou', 'estou', 'tudo', 'fixe', 'tranquilo',
+                            'otimo', 'pois', 'obrigado', 'ta', 'esta', 'sim'}
+            words = set(normalized.split())
+            social_turn = (bool(words & {'bem', 'fixe', 'tranquilo', 'otimo'})
+                           and words <= social_words and len(words) <= 6)
+            if previous and social_turn:
                 intent, confidence = self.context_intent.predict(previous['reply'], message)
                 if intent is not None:
                     replies = {'answer': 'Ainda bem! Como correu o teu dia?',
