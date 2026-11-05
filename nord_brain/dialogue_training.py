@@ -81,12 +81,11 @@ def curriculum() -> tuple[tuple[tuple[str,str],...],tuple[tuple[str,str],...]]:
 
 
 def _probes(brain):
-    # 12 previously unseen contextual utterances + 18 legacy Portuguese tests
-    # + teacher corrections. Keep evaluation bounded on a small VM.
+    # Evaluate all reserved contextual phrases, Portuguese checks, teacher
+    # corrections, and natural conversation without training on any of them.
     _,heldout=curriculum()
     valid=[row for row in heldout if not brain.memory.lesson_was_trained(row[0])]
-    # More varied coverage than a fixed 12-item subsample. Rotate evaluation
-    # through all 60 held-out variants on every session.
+    # Use all 60 contextual held-out variants instead of a biased subsample.
     dialogue=valid
     from .portuguese_training import curriculum as base
     old=[row for row in base()[1] if not brain.memory.lesson_was_trained(row[0])]
@@ -151,7 +150,7 @@ def train(brain,updates: int=12,rate: float=.00006) -> dict:
                 brain.core.train(q,a,epochs=1,rate=rate)
                 trained+=1
             after=tuple(brain.core.score(block) if block else None
-                        for block in (dialogue,old,teacher,other))
+                        for block in (dialogue,old,teacher,other,natural))
             accepted=trained>0 and all(
                 math.isfinite(current) and (
                     current<=baseline*multiplier+absolute)
@@ -169,7 +168,7 @@ def train(brain,updates: int=12,rate: float=.00006) -> dict:
                 brain.memory.event('dialogue_training_rejected',
                     f'validation {before[0]:.3f}->{after[0]:.3f}',after[0])
             return {
-                'accepted':accepted,'updates':brain.core.steps-baseline_steps,
+                'accepted':accepted,'updates':brain.core.steps-baseline_steps if accepted else 0,
                 'dialogue_before':round(before[0],4),
                 'dialogue_after':round(after[0],4),
                 'portuguese_before':round(before[1],4) if before[1] is not None else None,
