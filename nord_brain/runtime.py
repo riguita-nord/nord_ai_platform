@@ -311,6 +311,27 @@ class Brain:
                     self.dialogue.add(message, reply, 'ato conversacional; interface',
                                       'dialogue', message.strip()[:240])
                     return reply, 'ato conversacional; interface'
+            # A short answer to the Nord's open question is conversational
+            # context, not a fresh factual question or a teacher lesson.
+            if (previous and previous['reply'].rstrip().endswith('?')
+                    and 1 <= len(message.split()) <= 5
+                    and not message.strip().endswith('?')
+                    and not message.lstrip().startswith('/')
+                    and interpret(message, None, False).kind not in
+                    ('fact', 'teach', 'identity', 'correction', 'math_question',
+                     'math_example', 'search', 'intent_instruction')):
+                prompt = (f'Nord: {previous["reply"]}\\n'
+                          f'Tu: {message}\\nNord:')
+                continuation = self.language.generate(prompt, max_tokens=180)
+                if not continuation:
+                    continuation = ('Percebi. Queres desenvolver essa ideia ou '
+                                    'preferes que sugira outro tema?')
+                self.awaiting_explanation = False
+                self.last_question = None
+                self.dialogue.add(message, continuation,
+                                  'continuidade de resposta curta', 'dialogue',
+                                  previous.get('topic') or message.strip()[:240])
+                return continuation, 'continuidade de resposta curta'
             kind = followup_kind(message)
             # Neural head interprets unexpected phrasing against the active
             # subject; it can override a generic heuristic, but never an
