@@ -263,6 +263,7 @@ def describe(result):
               'Treino rejeitado; checkpoint anterior recuperado.')
     return (f"{status} Exemplos usados: {result['examples']}; "
             f"passos neuronais: {result['steps']}. "
+            f"Tentativas adaptativas: {result.get('attempts', 1)}. "
             f"Perda linguística reservada: {result['before']} → {result['after']}. " +
             ('Avaliações que impediram o treino: ' + '; '.join(result['regressions']) + '. '
              if result.get('regressions') else '') +
