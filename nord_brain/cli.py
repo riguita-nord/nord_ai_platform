@@ -29,6 +29,7 @@ HELP='''Fala normalmente comigo. Exemplos:
   Pausa aprendizagem. / Retoma aprendizagem.
 
 Comandos técnicos opcionais: /cerebro, /avaliar, /ajuda, /sair
+  /preparar-dicionario <ficheiro.jsonl> (extrai palavras e significados)
   /importar-corpus <url_https_txt> (descarrega texto; não treina automaticamente)
   /treinar-linguagem [12] [ficheiro.txt]  (treino misto de frases, diálogos e texto PT-PT)
   /avaliar-linguagem     (avaliação independente da linguagem e do contexto)
@@ -82,6 +83,15 @@ def handle(brain,line):
         domain=parts[1] if len(parts)>1 else 'tudo'
         amount=int(parts[2]) if len(parts)>2 else 1
         return brain.simulate_cognition(domain,amount)[0]
+    if line.startswith('/preparar-dicionario '):
+        from .wiktionary_training import convert
+        args=shlex.split(line)
+        if len(args)!=2:
+            raise ValueError('Usa /preparar-dicionario <ficheiro.jsonl>')
+        destination=brain.data_dir/'corpus_importado'/'wikcionario_pt.txt'
+        result=convert(args[1],str(destination))
+        return (f'Dicionário preparado: {result["entries"]} definições. '
+                f'Para treinar: /treinar-linguagem 48 {result["path"]}')
     if line.startswith('/importar-corpus '):
         from .corpus_import import import_text
         url=line.split(None,1)[1].strip()
