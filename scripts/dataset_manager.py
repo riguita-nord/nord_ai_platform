@@ -58,6 +58,8 @@ def pages_batch(batch=20):
                   "prop": "extracts|info|revisions", "explaintext": "1",
                   "exsectionformat": "plain", "inprop": "url",
                   "rvprop": "ids|timestamp", "rvlimit": "1", "redirects": "1"})
+    if "error" in data:
+        raise RuntimeError(f"Wikipedia API error: {data['error']}")
     return data.get("query", {}).get("pages", [])
 
 
