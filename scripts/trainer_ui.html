@@ -21,6 +21,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0b1019;border:1px so
 <section class="card"><h2>Autenticação</h2><label for="token">Token de acesso (mostrado no terminal)</label>
 <input id="token" type="password" autocomplete="off" placeholder="Introduz o token"><p><small>O token fica apenas nesta página, em memória. Não é guardado no navegador.</small></p></section>
 <section class="card"><h2>Dataset</h2><div class="stat" id="bytes">—</div><p>Texto disponível para treino</p><small>Origem: training/dataset/train.txt · mínimo 1 MB</small></section>
+<section class="card"><h2>Recolha na Internet</h2><p>Importar artigos da Wikipédia portuguesa, com origem e licença registadas. Respeita os limites da API.</p><label for="target">Objetivo do dataset (MB)</label><input id="target" type="number" min="1" max="400" value="10"><label for="delay">Intervalo entre pedidos (segundos)</label><input id="delay" type="number" min="3" max="3600" value="10"><div class="actions"><button id="collect">Recolher da Wikipédia</button></div><small>Os artigos já recolhidos são preservados. Outros sites requerem importação de textos autorizados.</small></section>
 <section class="card"><h2>Nova sessão</h2>
 <label for="mode">Tipo de treino</label><select id="mode"><option value=".75">Misto · 75% texto / 25% diálogo</option><option value=".95">Linguagem · 95% texto</option><option value=".1">Conversação · 90% diálogo</option></select>
 <label for="steps">Atualizações neuronais</label><input id="steps" type="number" min="1" max="100000" value="1000">
@@ -37,12 +38,18 @@ async function request(path,method="GET",body){
 }
 async function refresh(){
  if(!$("token").value){$("status").textContent="Token necessário";return}
- try{const d=await request("/api/status");$("status").textContent=d.running?"Treino em curso":"Em espera";
+ try{const d=await request("/api/status");$("status").textContent=d.running?(d.kind==="collect"?"Recolha em curso":"Treino em curso"):"Em espera";
  $("bytes").textContent=(d.dataset_bytes/1000000).toFixed(2)+" MB";
  $("log").textContent=d.log||"Sem registos de treino";
- $("start").disabled=d.running;$("stop").disabled=!d.running;
+ $("start").disabled=d.running;$("collect").disabled=d.running;$("stop").disabled=!d.running;
  }catch(e){$("status").textContent="Sem acesso";$("message").textContent=e.message}
 }
+$("collect").onclick=async()=>{try{
+ const target_mb=Number($("target").value),delay=Number($("delay").value);
+ if(!Number.isInteger(target_mb)||target_mb<1||target_mb>400||!Number.isFinite(delay)||delay<3||delay>3600)throw Error("Configuração de recolha inválida");
+ await request("/api/collect","POST",{target_mb,delay});
+ $("message").textContent="Recolha iniciada";await refresh();
+ }catch(e){$("message").textContent=e.message}};
 $("start").onclick=async()=>{try{
  const steps=Number($("steps").value);
  if(!Number.isInteger(steps)||steps<1||steps>100000)throw Error("Número de atualizações inválido");
