@@ -9,6 +9,8 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
+import torch
+
 from .conversation_corpus import TRAINING as NATURAL_TRAIN, HOLDOUT as NATURAL_HOLDOUT
 from .dialogue_training import curriculum as contextual_curriculum
 from .portuguese_training import curriculum as portuguese_curriculum
@@ -175,6 +177,9 @@ def train(brain, updates=12, *, path=None, rate=.00006):
         if not groups[0]:
             raise ValueError('Não existem exemplos linguísticos independentes para avaliar')
         before = _scores(brain, groups)
+        # Anchor to the accepted checkpoint, never to rejected trial weights.
+        anchor = {name: param.detach().clone()
+                  for name, param in brain.core.model.named_parameters()}
         general_train, _ = portuguese_curriculum()
         contextual_train, _ = contextual_curriculum()
         dialogue_train = tuple((training_prompt(turns, brain.core.model.config.context), answer) for turns, answer in DIALOGUE_TRAIN)
@@ -219,6 +224,11 @@ def train(brain, updates=12, *, path=None, rate=.00006):
                     last_loss = brain.core.train(question, answer, epochs=1,
                                                  rate=step_rate)
                     trained += 1
+                    # Conservative weight anchoring prevents rapid drift.
+                    # This is a lightweight L2-style approximation, not EWC.
+                    with torch.no_grad():
+                        for name, param in brain.core.model.named_parameters():
+                            param.lerp_(anchor[name], .025)
                 after = _scores(brain, groups)
                 regressions = [
                     f'{label}: {old:.4f} -> {new:.4f} (limite +{margin:.2f})'
