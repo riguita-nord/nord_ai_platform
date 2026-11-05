@@ -189,9 +189,7 @@ def train(brain, updates=12, *, path=None, rate=.00006):
         pools = (TRAIN, dialogue_train, NATURAL_TRAIN, contextual_multi,
                  dialogue_train, TRAIN, contextual_train, contextual_multi,
                  dialogue_train, general_train)
-        teacher_replay = tuple(brain.memory.db.execute(
-            "SELECT question,answer FROM lessons WHERE origin='teacher' "
-            "ORDER BY id DESC LIMIT 64").fetchall())
+        teacher_replay = ()  # No legacy lesson replay in isolated conversational training
         cursor = int(brain.memory.get_meta('language_curriculum_cursor', '0'))
         start_steps = brain.language_core.steps
         brain.language_core.save()
@@ -213,13 +211,12 @@ def train(brain, updates=12, *, path=None, rate=.00006):
                 for n in range(updates):
                     index = cursor + n
                     step_rate = rate * multiplier
-                    if index % 12 == 0:
+                    if index % 3 == 0:
                         last_loss = brain.language_core.train_text(corpus, updates=1,
                                                           rate=step_rate * .65)
                         trained += 1
                         continue
-                    pool = (teacher_replay if teacher_replay and index % 4 == 1
-                            else pools[index % len(pools)])
+                    pool = pools[index % len(pools)]
                     row = pool[((index * 19) // 7 + index // 3) % len(pool)]
                     question, answer = row
                     if (brain.memory.is_training_blocked(question)
