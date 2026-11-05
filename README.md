@@ -1,3 +1,40 @@
+## Nord Brain — primeira fase de treino linguístico misto (PT-PT)
+
+Esta fase usa **o mesmo Transformer próprio**, sem Qwen nem serviços de IA.
+Acrescenta `nord_brain/linguistic_training.py` e o corpus original
+`nord_brain/data/pt_pt_seed.txt`. O treino intercala texto corrido, linguagem
+quotidiana, construção de frases, perguntas de significado, diálogos com
+histórico e exemplos anteriores, para diminuir a aprendizagem repetitiva
+de perguntas isoladas. É um corpus **inicial e limitado**, não uma biblioteca
+de português completa.
+
+No terminal `./nord`:
+
+- `/avaliar-linguagem`: perdas em frases novas, diálogo natural, contexto e
+  português antigo. **Isto mede previsão de tokens, não fluência.**
+- `/treinar-linguagem 12`: inicia uma pequena sessão de treino do Transformer
+  com o corpus incluído; aceita entre 1 e 48 atualizações por sessão.
+- `/treinar-linguagem 48 caminho/para/portugues.txt`: usa um ficheiro UTF-8
+  **escolhido e aprovado por ti** (.txt ou .md, 180 bytes a 100 KB).
+  Divide textos extensos em ficheiros e alterna os conteúdos.
+- `/gerar-neural <pergunta>`: inspeciona a geração bruta da rede, que pode
+  ainda ser incorreta mesmo quando a perda diminui.
+
+O sistema **não ensina automaticamente com páginas web nem com as próprias
+respostas**. Testes independentes e lições do professor são avaliados antes
+e depois; regressões significativas provocam rollback do checkpoint. As
+sessões não iniciam a aprendizagem em segundo plano por esta funcionalidade:
+o comando explicita o treino. O modelo atual continua limitado a 256
+bytes de contexto (ou ao contexto do checkpoint guardado), pelo que estas
+mudanças **não garantem ainda conversas naturais**. O crescimento de contexto
+e a migração para tokenização por subpalavras serão fases separadas, para
+não invalidar os checkpoints atuais.
+
+O teste `python -m unittest discover -s tests -p 'test_linguistic_training.py' -v`
+cobre separação treino/avaliação, treino efetivo, CLI e rollback.
+
+---
+
 ## Treino de conversa natural PT-PT (novembro de 2026)
 
 O comando `/treinar-dialogos 12` intercala agora exemplos de diálogo contextual, 
