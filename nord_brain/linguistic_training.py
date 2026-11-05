@@ -187,7 +187,8 @@ def train(brain, updates=12, *, path=None, rate=.00006):
         dialogue_train = tuple((training_prompt(turns, brain.core.model.config.context), answer) for turns, answer in DIALOGUE_TRAIN)
         contextual_multi = contextual_examples(brain.core.model.config.context)
         pools = (TRAIN, dialogue_train, NATURAL_TRAIN, contextual_multi,
-                 contextual_train, contextual_multi, general_train)
+                 dialogue_train, TRAIN, contextual_train, contextual_multi,
+                 dialogue_train, general_train)
         teacher_replay = tuple(brain.memory.db.execute(
             "SELECT question,answer FROM lessons WHERE origin='teacher' "
             "ORDER BY id DESC LIMIT 64").fetchall())
@@ -237,7 +238,7 @@ def train(brain, updates=12, *, path=None, rate=.00006):
                     # This is a lightweight L2-style approximation, not EWC.
                     with torch.no_grad():
                         for name, param in brain.core.model.named_parameters():
-                            param.lerp_(anchor[name], .025)
+                            param.lerp_(anchor[name], .005)
                 after = _scores(brain, groups)
                 regressions = [
                     f'{label}: {old:.4f} -> {new:.4f} (limite +{margin:.2f})'
