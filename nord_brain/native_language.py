@@ -64,6 +64,19 @@ def coherent_sample(text: str, *, creative: bool=False) -> bool:
         return False
     if not any(ch in value for ch in 'aeiouáàâãéêíóôõú'):
         return False
+    # A byte-level model can emit plausible-looking but meaningless syllables.
+    # This is only a conservative display filter, not a fluency certificate.
+    common = {'a','o','os','as','um','uma','de','do','da','dos','das','e',
+              'em','no','na','nos','nas','que','se','com','para','por',
+              'eu','tu','ele','ela','nós','vocês','não','sim','é','são',
+              'estou','está','tenho','tem','mais','mas','como','quando',
+              'onde','porque','pode','podemos','quero','queres','bem',
+              'olá','hoje','sobre','isso','este','esta','foi','ser'}
+    recognizable = sum(word in common for word in words)
+    if recognizable < 2 or recognizable / len(words) < .18:
+        return False
+    if sum(len(word) <= 2 for word in words) / len(words) > .55:
+        return False
     return True
 
 
