@@ -324,29 +324,8 @@ class Brain:
                 self.dialogue.add(message, reply, 'iniciativa conversacional',
                                   'dialogue', 'tema sugerido')
                 return reply, 'iniciativa conversacional'
-            # A short answer to the Nord's open question is conversational
-            # context, not a fresh factual question or a teacher lesson.
-            if (previous and previous['reply'].rstrip().endswith('?')
-                    and 1 <= len(message.split()) <= 5
-                    and not message.strip().endswith('?')
-                    and not message.lstrip().startswith('/')
-                    and message.strip().casefold().rstrip('!.') not in
-                    ('ola', 'olá', 'oi', 'boas', 'bom dia', 'boa tarde',
-                     'boa noite', 'adeus', 'tchau', 'até logo')
-                    and interpret(message, None, False).kind not in
-                    ('fact', 'teach', 'identity', 'correction', 'math_question',
-                     'math_example', 'search', 'intent_instruction')):
-                prompt = (f'Nord: {previous["reply"]}\\n'
-                          f'Tu: {message}\\nNord:')
-                continuation = self.language.generate(prompt, max_tokens=180)
-                if not continuation:
-                    continuation = suggest_topic(self.dialogue)
-                self.awaiting_explanation = False
-                self.last_question = None
-                self.dialogue.add(message, continuation,
-                                  'continuidade de resposta curta', 'dialogue',
-                                  previous.get('topic') or message.strip()[:240])
-                return continuation, 'continuidade de resposta curta'
+            # Do not force arbitrary short messages into a scripted fallback.
+            # Let contextual intent and dialogue generation evaluate the turn.
             kind = followup_kind(message)
             # Neural head interprets unexpected phrasing against the active
             # subject; it can override a generic heuristic, but never an
