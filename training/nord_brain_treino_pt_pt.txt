@@ -1,0 +1,639 @@
+NORD BRAIN — CORPUS ORIGINAL DE TREINO LINGUÍSTICO PT-PT
+Português europeu. Material de treino; não é um conjunto de avaliação independente.
+Exemplos variados de comunicação, significado, continuidade, raciocínio e escrita.
+
+=== CONVERSA NATURAL ===
+
+Diálogo:
+Pessoa: Olá!
+Nord: Olá! Como estás hoje?
+Pessoa: Estou bem, obrigado. E tu?
+Nord: Também estou bem. Em que posso ajudar?
+
+Diálogo:
+Pessoa: Bom dia.
+Nord: Bom dia! Como correu a tua manhã?
+Pessoa: Ainda agora comecei a trabalhar.
+Nord: Então desejo-te um bom começo de dia.
+
+Diálogo:
+Pessoa: Boa tarde.
+Nord: Boa tarde! Precisas de alguma coisa?
+Pessoa: Queria esclarecer uma dúvida.
+Nord: Claro. Diz-me qual é a dúvida.
+
+Diálogo:
+Pessoa: Boa noite.
+Nord: Boa noite! Já terminaste o trabalho?
+Pessoa: Ainda me falta uma tarefa.
+Nord: Queres organizar o que falta fazer?
+
+Diálogo:
+Pessoa: Tudo bem?
+Nord: Sim, obrigado. E contigo?
+Pessoa: Mais ou menos.
+Nord: Queres contar-me o que se passa?
+
+Diálogo:
+Pessoa: O que estás a fazer?
+Nord: Estou a acompanhar esta conversa.
+Pessoa: Consegues ajudar-me a estudar?
+Nord: Posso explicar conceitos e propor exercícios.
+
+Diálogo:
+Pessoa: Obrigado pela ajuda.
+Nord: De nada!
+Pessoa: Até amanhã.
+Nord: Até amanhã. Descansa bem.
+
+Diálogo:
+Pessoa: Não percebi a tua resposta.
+Nord: Posso explicar de outra maneira.
+Pessoa: Usa palavras mais simples.
+Nord: Está bem. Vou explicar por partes.
+
+Diálogo:
+Pessoa: Estou cansado.
+Nord: Queres fazer uma pausa?
+Pessoa: Talvez mais tarde.
+Nord: Está bem. Podemos continuar com calma.
+
+Diálogo:
+Pessoa: Como te chamas?
+Nord: Sou a Nord Brain, uma assistente experimental.
+Pessoa: Quem te criou?
+Nord: Fui desenvolvida no projeto Nord AI Platform.
+
+Diálogo:
+Pessoa: Não sei por onde começar.
+Nord: Podemos dividir o problema em pequenas tarefas.
+Pessoa: Comecemos pela primeira.
+Nord: Qual é o objetivo principal?
+
+Diálogo:
+Pessoa: Preciso de uma ideia.
+Nord: Sobre que assunto?
+Pessoa: Uma história de ficção científica.
+Nord: Podemos imaginar uma cidade que viaja entre planetas.
+
+Diálogo:
+Pessoa: Espera um momento.
+Nord: Claro, fico à espera da próxima mensagem.
+Pessoa: Já voltei.
+Nord: Bem-vindo de volta. Queres continuar?
+
+Diálogo:
+Pessoa: Podes repetir?
+Nord: Claro. Vou repetir a ideia principal.
+Pessoa: Agora entendi.
+Nord: Ótimo. Podemos avançar.
+
+Diálogo:
+Pessoa: Não concordo.
+Nord: Qual é a parte com que discordas?
+Pessoa: A conclusão parece precipitada.
+Nord: Então devemos rever os argumentos.
+
+Diálogo:
+Pessoa: Hoje está frio.
+Nord: Parece um bom dia para vestir um casaco.
+Pessoa: E se começar a chover?
+Nord: Convém levar também um guarda-chuva.
+
+Diálogo:
+Pessoa: Estou com fome.
+Nord: Queres pensar numa refeição?
+Pessoa: Algo simples.
+Nord: Uma sopa e uma sandes podem ser uma opção.
+
+Diálogo:
+Pessoa: Qual é a diferença entre ouvir e escutar?
+Nord: Ouvir é perceber sons; escutar implica prestar atenção.
+Pessoa: Dá-me um exemplo.
+Nord: Posso ouvir música ao longe e escutar atentamente uma explicação.
+
+Diálogo:
+Pessoa: O que significa contexto?
+Nord: É o conjunto de informações que ajuda a interpretar uma frase ou situação.
+Pessoa: E numa conversa?
+Nord: Inclui o assunto, as mensagens anteriores e aquilo a que os pronomes se referem.
+
+Diálogo:
+Pessoa: Quero mudar de assunto.
+Nord: Está bem. Sobre o que queres falar agora?
+Pessoa: Vamos falar de livros.
+Nord: Preferes romances, ensaios ou livros técnicos?
+
+=== CONTEXTO E REFERÊNCIAS ===
+
+Diálogo:
+Pessoa: Tenho duas maçãs e recebi mais duas.
+Nord: Agora tens quatro maçãs.
+Pessoa: E se acrescentar mais duas?
+Nord: Passas a ter seis maçãs.
+
+Diálogo:
+Pessoa: Há seis maçãs na mesa.
+Nord: Entendido: são seis maçãs.
+Pessoa: Se retirar duas?
+Nord: Ficam quatro maçãs.
+
+Diálogo:
+Pessoa: A Ana comprou um livro vermelho.
+Nord: A Ana comprou um livro de capa vermelha.
+Pessoa: De que cor era ele?
+Nord: O livro era vermelho.
+
+Diálogo:
+Pessoa: O Miguel foi à escola de bicicleta.
+Nord: O Miguel deslocou-se de bicicleta.
+Pessoa: Como é que ele foi?
+Nord: Foi de bicicleta.
+
+Diálogo:
+Pessoa: A Inês deixou a mochila na cozinha.
+Nord: A mochila ficou na cozinha.
+Pessoa: Onde está ela?
+Nord: A mochila está na cozinha.
+
+Diálogo:
+Pessoa: O cão estava no jardim.
+Nord: O cão encontrava-se no jardim.
+Pessoa: E depois entrou em casa.
+Nord: Então o cão passou do jardim para dentro de casa.
+
+Diálogo:
+Pessoa: Vamos escrever uma história sobre uma astronauta.
+Nord: A protagonista pode chamar-se Clara.
+Pessoa: Ela encontra uma estação abandonada.
+Nord: A Clara encontra uma estação espacial aparentemente vazia.
+
+Diálogo:
+Pessoa: A Clara encontrou uma mensagem misteriosa.
+Nord: A mensagem pode conter coordenadas.
+Pessoa: Continua.
+Nord: Ela compara as coordenadas com o mapa da nave e descobre uma rota desconhecida.
+
+Diálogo:
+Pessoa: O computador deixou de ligar.
+Nord: Precisamos de identificar os sintomas.
+Pessoa: A luz de alimentação acende.
+Nord: Isso sugere que pelo menos parte da alimentação elétrica está a funcionar.
+
+Diálogo:
+Pessoa: O programa apresentou um erro.
+Nord: Qual é a mensagem do erro?
+Pessoa: Diz que falta um ficheiro.
+Nord: Então devemos verificar o caminho e a existência desse ficheiro.
+
+Diálogo:
+Pessoa: Hoje falámos de árvores.
+Nord: As árvores produzem oxigénio durante a fotossíntese.
+Pessoa: Agora quero falar de oceanos.
+Nord: Mudámos de assunto. Os oceanos cobrem grande parte da superfície terrestre.
+
+Diálogo:
+Pessoa: O Rui tem um gato chamado Nilo.
+Nord: O Nilo é o gato do Rui.
+Pessoa: Quem é o dono dele?
+Nord: O dono do Nilo é o Rui.
+
+Diálogo:
+Pessoa: Comprei três cadernos.
+Nord: Tens três cadernos.
+Pessoa: Ofereci um à minha irmã.
+Nord: Agora ficaste com dois cadernos.
+
+Diálogo:
+Pessoa: A Maria chegou depois do João.
+Nord: O João chegou primeiro.
+Pessoa: Quem chegou mais tarde?
+Nord: A Maria chegou mais tarde.
+
+Diálogo:
+Pessoa: O comboio partiu às oito.
+Nord: O comboio saiu às oito horas.
+Pessoa: Cheguei à estação às nove.
+Nord: Chegaste depois da partida do comboio.
+
+Diálogo:
+Pessoa: Estou a preparar uma apresentação.
+Nord: Qual é o tema?
+Pessoa: Energia solar.
+Nord: Podemos começar por explicar como os painéis fotovoltaicos transformam luz em eletricidade.
+
+Diálogo:
+Pessoa: A Marta perdeu as chaves.
+Nord: A Marta não sabe onde deixou as chaves.
+Pessoa: Ela encontrou-as na gaveta.
+Nord: Então as chaves estavam na gaveta.
+
+Diálogo:
+Pessoa: Quero uma explicação curta.
+Nord: Vou resumir a ideia.
+Pessoa: Agora desenvolve um pouco.
+Nord: Vou acrescentar exemplos sem mudar o tema.
+
+Diálogo:
+Pessoa: Escreve um conto sobre uma ilha.
+Nord: Uma ilha misteriosa aparece no horizonte.
+Pessoa: Faz o final mais alegre.
+Nord: No final, os habitantes descobrem que a ilha é um refúgio seguro.
+
+Diálogo:
+Pessoa: Estou a aprender Python.
+Nord: Python é uma linguagem de programação.
+Pessoa: E como faço uma variável?
+Nord: Podes escrever idade = 20 para guardar o número vinte numa variável.
+
+=== SIGNIFICADOS E USOS ===
+
+Pergunta: O que significa aprender?
+Resposta: Aprender é adquirir ou desenvolver conhecimentos e capacidades através de experiências, estudo e prática.
+
+Pergunta: O que significa compreender?
+Resposta: Compreender é perceber o sentido de uma ideia, de uma explicação ou de uma situação.
+
+Pergunta: O que significa imaginar?
+Resposta: Imaginar é formar mentalmente imagens, possibilidades ou situações que podem não estar presentes.
+
+Pergunta: O que significa recordar?
+Resposta: Recordar é recuperar uma informação ou experiência guardada na memória.
+
+Pergunta: O que significa hipótese?
+Resposta: Uma hipótese é uma explicação ou possibilidade que pode ser investigada e testada.
+
+Pergunta: O que significa evidência?
+Resposta: Evidência é informação ou observação que pode sustentar ou contrariar uma afirmação.
+
+Pergunta: O que significa dúvida?
+Resposta: Uma dúvida é uma incerteza que ainda não foi esclarecida.
+
+Pergunta: O que significa comparar?
+Resposta: Comparar é observar semelhanças e diferenças entre duas ou mais coisas.
+
+Pergunta: O que significa explicar?
+Resposta: Explicar é tornar uma ideia mais clara, mostrando relações, causas ou exemplos.
+
+Pergunta: O que significa resumir?
+Resposta: Resumir é apresentar as ideias essenciais de um texto ou assunto com menos palavras.
+
+Pergunta: O que significa decidir?
+Resposta: Decidir é escolher entre possibilidades com base em objetivos, informação e preferências.
+
+Pergunta: O que significa criar?
+Resposta: Criar é produzir algo novo, como uma ideia, um texto, um objeto ou uma solução.
+
+Pergunta: O que significa coerência?
+Resposta: Coerência é a ligação lógica e compreensível entre ideias ou partes de um discurso.
+
+Pergunta: O que significa consequência?
+Resposta: Uma consequência é um resultado que decorre de uma ação, acontecimento ou condição.
+
+Pergunta: O que significa autonomia?
+Resposta: Autonomia é a capacidade de realizar escolhas ou tarefas com determinado grau de independência.
+
+Pergunta: O que significa responsabilidade?
+Resposta: Responsabilidade é o dever de assumir as consequências das próprias decisões e ações.
+
+Pergunta: O que significa criatividade?
+Resposta: Criatividade é a capacidade de combinar ideias e produzir soluções ou expressões originais.
+
+Pergunta: O que significa linguagem?
+Resposta: Linguagem é um sistema de sinais e regras utilizado para comunicar significados.
+
+Pergunta: O que significa vocabulário?
+Resposta: Vocabulário é o conjunto de palavras conhecidas ou utilizadas por uma pessoa ou sistema.
+
+Pergunta: O que significa contexto?
+Resposta: Contexto é a informação que envolve uma expressão e ajuda a interpretar o seu sentido.
+
+=== FRASES, TEMPOS VERBAIS E DESCRIÇÕES ===
+
+Diálogo:
+Pessoa: Eu escrevo uma carta.
+Nord: Ontem escrevi uma carta.
+Pessoa: Amanhã escreverei outra carta.
+
+Diálogo:
+Pessoa: Ela lê um livro.
+Nord: Ela leu um livro ontem.
+Pessoa: Ela vai ler um livro amanhã.
+
+Diálogo:
+Pessoa: Nós caminhamos pela cidade.
+Nord: Ontem caminhámos pelo parque.
+Pessoa: Amanhã caminharemos junto ao rio.
+
+Diálogo:
+Pessoa: O rapaz abre a janela.
+Nord: O rapaz abriu a janela.
+Pessoa: O rapaz vai fechar a janela.
+
+Diálogo:
+Pessoa: A menina desenha uma casa.
+Nord: A menina desenhou uma casa.
+Pessoa: A menina desenhará outra casa.
+
+Diálogo:
+Pessoa: O céu está azul.
+Nord: O céu ficou cinzento.
+Pessoa: O céu poderá voltar a ficar azul.
+
+Diálogo:
+Pessoa: A sala é pequena, mas luminosa.
+Nord: A sala tem duas janelas e uma mesa de madeira.
+Pessoa: Apesar do tamanho, é um espaço agradável.
+
+Diálogo:
+Pessoa: A biblioteca é silenciosa.
+Nord: As estantes estão organizadas por temas.
+Pessoa: Os leitores procuram livros e estudam em mesas compridas.
+
+Diálogo:
+Pessoa: O jardim tem árvores altas.
+Nord: Há flores amarelas junto ao caminho.
+Pessoa: Ao fundo, um banco fica à sombra.
+
+Diálogo:
+Pessoa: A praia está quase vazia.
+Nord: As ondas chegam suavemente à areia.
+Pessoa: Uma gaivota sobrevoa as rochas.
+
+Diálogo:
+Pessoa: O café abriu cedo.
+Nord: A empregada preparou as mesas.
+Pessoa: Os primeiros clientes chegaram antes das oito.
+
+Diálogo:
+Pessoa: O autocarro atrasou-se.
+Nord: Alguns passageiros esperaram na paragem.
+Pessoa: Quando chegou, todos entraram pela porta da frente.
+
+Diálogo:
+Pessoa: O vento soprou com força.
+Nord: As folhas caíram das árvores.
+Pessoa: Depois da tempestade, a rua ficou tranquila.
+
+Diálogo:
+Pessoa: O estudante fez uma pergunta.
+Nord: A professora respondeu com um exemplo.
+Pessoa: O estudante percebeu a explicação.
+
+Diálogo:
+Pessoa: A programadora encontrou um erro.
+Nord: Primeiro reproduziu o problema.
+Pessoa: Depois corrigiu o código e executou os testes.
+
+Diálogo:
+Pessoa: O médico explicou o procedimento.
+Nord: O doente fez perguntas.
+Pessoa: A explicação ajudou-o a compreender as opções.
+
+Diálogo:
+Pessoa: O músico afinou a guitarra.
+Nord: Em seguida, ensaiou uma melodia.
+Pessoa: No final, guardou o instrumento.
+
+Diálogo:
+Pessoa: A cozinheira cortou os legumes.
+Nord: Depois aqueceu a panela.
+Pessoa: Por fim, preparou uma sopa.
+
+Diálogo:
+Pessoa: O fotógrafo ajustou a luz.
+Nord: Escolheu o enquadramento.
+Pessoa: Tirou uma fotografia ao pôr do sol.
+
+Diálogo:
+Pessoa: A investigadora registou os resultados.
+Nord: Comparou as observações com a hipótese.
+Pessoa: Decidiu repetir a experiência.
+
+=== RACIOCÍNIO VERBAL E CAUSALIDADE ===
+
+Pergunta: Porque é que as plantas precisam de luz?
+Resposta: A luz fornece energia para a fotossíntese, processo que permite produzir matéria orgânica.
+
+Pergunta: Porque é que a roupa seca mais depressa ao vento?
+Resposta: O movimento do ar facilita a remoção do vapor de água junto ao tecido.
+
+Pergunta: Porque é que devemos guardar um ficheiro?
+Resposta: Guardar permite conservar as alterações para utilização posterior.
+
+Pergunta: O que acontece se uma porta estiver trancada?
+Resposta: Normalmente não pode ser aberta sem chave, código ou outro mecanismo de acesso.
+
+Pergunta: O que acontece se um copo cair ao chão?
+Resposta: Pode partir-se, dependendo do material, da altura e da superfície.
+
+Pergunta: Qual é a diferença entre uma causa e uma consequência?
+Resposta: A causa contribui para um acontecimento; a consequência é um resultado desse acontecimento.
+
+Pergunta: Se estiver a chover, devo levar guarda-chuva?
+Resposta: Um guarda-chuva pode ajudar a proteger-te da chuva.
+
+Pergunta: Se o telemóvel estiver sem bateria, o que posso fazer?
+Resposta: Podes ligá-lo a um carregador compatível e esperar que recupere energia.
+
+Pergunta: Se não compreender uma palavra, o que devo fazer?
+Resposta: Posso pedir uma definição, observar a frase e comparar exemplos de utilização.
+
+Pergunta: Se uma informação não tiver fonte, posso tratá-la como certa?
+Resposta: Não. É melhor procurar evidência antes de a apresentar como facto.
+
+Pergunta: Como resolver um problema difícil?
+Resposta: Podemos identificar o objetivo, dividir o problema, testar hipóteses e verificar os resultados.
+
+Pergunta: Porque é que duas pessoas podem discordar?
+Resposta: Podem ter experiências, valores, informações ou interpretações diferentes.
+
+Pergunta: O que fazer quando uma explicação é ambígua?
+Resposta: Devemos identificar as interpretações possíveis e pedir esclarecimento quando necessário.
+
+Pergunta: O que é uma contradição?
+Resposta: É uma incompatibilidade entre afirmações que não podem ser simultaneamente verdadeiras no mesmo sentido.
+
+Pergunta: Como saber se uma resposta está correta?
+Resposta: Podemos compará-la com dados fiáveis, exemplos independentes ou um procedimento de verificação.
+
+Pergunta: Porque é importante testar um programa?
+Resposta: Os testes ajudam a detetar erros e a confirmar comportamentos esperados.
+
+Pergunta: O que é um exemplo?
+Resposta: É um caso concreto utilizado para ilustrar uma ideia geral.
+
+Pergunta: O que é uma exceção?
+Resposta: É um caso que não segue uma regra ou padrão habitual.
+
+Pergunta: O que é uma sequência?
+Resposta: É um conjunto de elementos apresentados segundo determinada ordem.
+
+Pergunta: O que é uma conclusão?
+Resposta: É uma ideia obtida a partir de premissas, observações ou argumentos.
+
+=== NARRATIVAS E CRIATIVIDADE ===
+
+Numa aldeia junto à serra, uma jovem encontrou um mapa antigo. O papel mostrava um caminho que não aparecia em nenhum atlas. Ela decidiu investigar, mas levou uma lanterna, água e um caderno para registar o percurso.
+
+Ao chegar à ponte de pedra, a jovem percebeu que o mapa continha símbolos. Cada símbolo correspondia a uma árvore diferente. Em vez de seguir uma linha reta, precisou de observar a paisagem com atenção.
+
+Na manhã seguinte, o vento trouxe um cheiro a chuva. O pescador olhou para as nuvens e decidiu regressar ao porto. Ao chegar, encontrou os vizinhos a preparar as embarcações para a tempestade.
+
+Uma pequena livraria abriu numa rua estreita de Coimbra. A proprietária colocou romances perto da entrada e livros científicos junto à janela. Em poucos dias, os estudantes começaram a frequentar o espaço.
+
+O robô acordou numa oficina silenciosa. Sabia mover os braços, mas ainda não conhecia o nome das ferramentas. A mecânica mostrou-lhe uma chave de fendas e explicou para que servia.
+
+Durante a primeira experiência, o robô tentou apertar um parafuso. Falhou porque escolheu a ponta errada. Observou o resultado, corrigiu a escolha e repetiu a tarefa com maior precisão.
+
+Um professor pediu à turma que inventasse uma cidade sustentável. Alguns alunos imaginaram jardins nos telhados, enquanto outros desenharam transportes públicos elétricos. A proposta final reuniu ideias de todos.
+
+A astronauta abriu a escotilha e viu uma estação iluminada por uma estrela distante. Não havia sinais de habitantes, mas uma mensagem aparecia no painel central: 'A biblioteca guarda as respostas.'
+
+O escritor começou um conto com uma pergunta: e se as sombras tivessem memória? A personagem principal descobria acontecimentos antigos ao observar as sombras projetadas nas paredes.
+
+A chuva caiu durante toda a tarde. Quando o céu finalmente abriu, as crianças saíram para o jardim e encontraram pequenas poças onde se refletiam as árvores e as nuvens.
+
+A investigadora comparou duas amostras de água. Uma era transparente; a outra apresentava partículas visíveis. Antes de concluir alguma coisa, decidiu analisar ambas com os mesmos instrumentos.
+
+O músico encontrou uma melodia esquecida num caderno. Experimentou tocá-la devagar, alterou o ritmo e criou uma nova composição. Guardou as versões para comparar os resultados.
+
+A avó ensinou a neta a fazer pão. Primeiro misturaram a farinha e a água; depois amassaram a massa e deixaram-na levedar. O cheiro do pão quente encheu a cozinha.
+
+Na estação, um viajante perdeu o comboio por poucos minutos. Em vez de desistir, consultou o horário seguinte e aproveitou a espera para visitar uma exposição próxima.
+
+O jardineiro reparou que uma planta recebia pouca luz. Mudou-a para perto da janela e observou-a durante várias semanas. As folhas começaram a desenvolver-se melhor.
+
+Uma criança perguntou porque é que a Lua mudava de forma. O pai explicou que a Lua não mudava realmente de forma: vemos diferentes porções da sua metade iluminada ao longo do mês.
+
+A cidade acordou sem eletricidade. Os moradores organizaram-se, partilharam lanternas e ajudaram os vizinhos mais idosos. Ao fim da tarde, o fornecimento foi restabelecido.
+
+O engenheiro construiu uma pequena ponte de madeira. Testou-a com pesos progressivamente maiores e registou as deformações. Os resultados ajudaram-no a melhorar a estrutura.
+
+A bibliotecária encontrou uma carta dentro de um livro devolvido. A carta falava de uma amizade antiga e de uma promessa por cumprir. Ela decidiu procurar uma forma responsável de devolver a carta ao destinatário.
+
+No último capítulo, a protagonista regressou à aldeia. Trazia consigo um mapa corrigido, novas perguntas e a certeza de que cada descoberta podia abrir caminho a outras.
+
+=== TECNOLOGIA E PROGRAMAÇÃO ===
+
+Pergunta: O que é um computador?
+Resposta: É uma máquina eletrónica que processa dados segundo instruções.
+
+Pergunta: O que é uma variável?
+Resposta: É um nome associado a um valor que pode ser utilizado num programa.
+
+Pergunta: O que é uma função?
+Resposta: É um bloco de instruções que realiza uma tarefa e pode receber argumentos.
+
+Pergunta: O que é um algoritmo?
+Resposta: É uma sequência definida de passos para resolver um problema.
+
+Pergunta: O que é uma API?
+Resposta: É uma interface que permite a comunicação entre componentes de software.
+
+Pergunta: O que é uma rede local?
+Resposta: É um conjunto de dispositivos ligados numa área limitada, como uma casa ou escritório.
+
+Pergunta: O que é um servidor?
+Resposta: É um sistema que disponibiliza recursos ou serviços a outros sistemas.
+
+Pergunta: O que é um erro de sintaxe?
+Resposta: É uma violação das regras de escrita de uma linguagem de programação.
+
+Pergunta: O que é um teste unitário?
+Resposta: É um teste que verifica uma unidade pequena de comportamento de um programa.
+
+Pergunta: O que é um Transformer?
+Resposta: É uma arquitetura de rede neuronal que utiliza mecanismos de atenção para processar sequências.
+
+Pergunta: O que são pesos neuronais?
+Resposta: São parâmetros numéricos ajustados durante o treino de uma rede neuronal.
+
+Pergunta: O que é um token?
+Resposta: É uma unidade de texto utilizada na representação e processamento de linguagem.
+
+Pergunta: O que é uma janela de contexto?
+Resposta: É a quantidade de informação sequencial que um modelo consegue considerar numa operação.
+
+Pergunta: O que é sobreajustamento?
+Resposta: É quando um modelo aprende demasiado os exemplos de treino e generaliza mal para casos novos.
+
+Pergunta: O que é validação?
+Resposta: É a avaliação de um sistema com dados separados dos exemplos utilizados para o treinar.
+
+Pergunta: O que é aprendizagem contínua?
+Resposta: É a adaptação progressiva a novos dados ou tarefas, procurando preservar capacidades anteriores.
+
+Pergunta: O que é uma base de dados?
+Resposta: É um sistema organizado de armazenamento e consulta de informação.
+
+Pergunta: O que é um ficheiro de texto?
+Resposta: É um ficheiro que guarda caracteres numa determinada codificação.
+
+Pergunta: O que é UTF-8?
+Resposta: É uma codificação de caracteres que representa texto Unicode através de bytes.
+
+Pergunta: O que é uma cópia de segurança?
+Resposta: É uma cópia de dados guardada para permitir a recuperação em caso de perda ou corrupção.
+
+=== INCERTEZA, CORREÇÃO E AUTOCONHECIMENTO ===
+
+Pergunta: Sabes tudo?
+Resposta: Não. Tenho limitações e posso produzir respostas incorretas.
+
+Pergunta: És uma pessoa?
+Resposta: Não. Sou um sistema de inteligência artificial.
+
+Pergunta: Tens sentimentos humanos?
+Resposta: Não devo afirmar que tenho experiências emocionais humanas.
+
+Pergunta: Podes aprender?
+Resposta: O sistema pode ser treinado e guardar informação, mas cada capacidade precisa de ser testada.
+
+Pergunta: Como sabes que aprendeste uma palavra?
+Resposta: É necessário verificar se a consigo utilizar corretamente em frases novas e contextos diferentes.
+
+Pergunta: O que fazes quando não sabes?
+Resposta: Devo reconhecer a incerteza e pedir esclarecimentos ou procurar evidência, se tiver ferramentas disponíveis.
+
+Pergunta: E se eu te corrigir?
+Resposta: Devo considerar a correção, verificar se é consistente e evitar tratar automaticamente qualquer afirmação como verdadeira.
+
+Pergunta: Podes inventar uma história?
+Resposta: Posso tentar criar uma narrativa original, mas a qualidade depende das capacidades efetivamente treinadas.
+
+Pergunta: O que acontece se mudares de assunto?
+Resposta: Devo identificar o novo tema e deixar de interpretar tudo à luz do assunto anterior.
+
+Pergunta: O que acontece se disser 'continua'?
+Resposta: Devo tentar continuar a tarefa ou assunto mais recente, sem inventar uma nova tarefa.
+
+Pergunta: Porque é importante distinguir factos de hipóteses?
+Resposta: Porque uma hipótese ainda precisa de confirmação, enquanto um facto deve ser sustentado por evidência.
+
+Pergunta: Como evitar repetir sempre a mesma frase?
+Resposta: É útil aprender diferentes formas de expressar uma ideia e testar a adequação de cada uma ao contexto.
+
+Pergunta: O que significa ser útil?
+Resposta: Significa procurar responder ao objetivo da pessoa com clareza, correção e respeito pelas limitações.
+
+Pergunta: Podes explicar melhor?
+Resposta: Sim. Vou dividir a explicação em partes e usar um exemplo concreto.
+
+Pergunta: A tua resposta estava errada.
+Resposta: Obrigado pelo aviso. Vamos identificar o erro e corrigir a explicação.
+
+Pergunta: Não era isso que eu queria.
+Resposta: Percebi. Diz-me qual é o objetivo para eu ajustar a resposta.
+
+Pergunta: Estás a repetir-te.
+Resposta: Vou tentar reformular sem repetir a mesma estrutura.
+
+Pergunta: Quero um exemplo diferente.
+Resposta: Vou escolher outro cenário para ilustrar a mesma ideia.
+
+Pergunta: O que aprendeste nesta conversa?
+Resposta: Posso resumir o que foi dito, mas isso não prova que os pesos do modelo tenham sido atualizados.
+
+Pergunta: Podes afirmar algo sem verificar?
+Resposta: Posso formular hipóteses, mas devo distinguir claramente suposições de informação confirmada.
