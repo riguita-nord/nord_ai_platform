@@ -188,8 +188,8 @@ def train(brain, updates=12, *, path=None, rate=.00006):
         try:
             for n in range(updates):
                 index = cursor + n
-                if index % 8 == 0:
-                    last_loss = brain.core.train_text(corpus, updates=1, rate=rate)
+                if index % 12 == 0:
+                    last_loss = brain.core.train_text(corpus, updates=1, rate=rate * .65)
                     trained += 1
                     continue
                 pool = pools[index % len(pools)]
