@@ -50,6 +50,10 @@ class Brain:
         if profile not in profiles:
             raise ValueError('NORD_BRAIN_PRESET deve ser tiny, small ou medium')
         self.core=NeuralCore(self.data_dir/'brain-v2.pt',config=profiles[profile])
+        # Fixed balanced context for CPU; RoPE has no learned position table.
+        if self.core.model.config.context != 512:
+            self.core.model.config.context = 512
+            self.core.save()
         self.reasoner=ReasoningEngine(self.memory)
         # Separate CPU-trainable predictive brain for sensorimotor experiences.
         # Its weights are trained from transitions, never injected via chat context.
@@ -317,6 +321,9 @@ class Brain:
                     and 1 <= len(message.split()) <= 5
                     and not message.strip().endswith('?')
                     and not message.lstrip().startswith('/')
+                    and message.strip().casefold().rstrip('!.') not in
+                    ('ola', 'olá', 'oi', 'boas', 'bom dia', 'boa tarde',
+                     'boa noite', 'adeus', 'tchau', 'até logo')
                     and interpret(message, None, False).kind not in
                     ('fact', 'teach', 'identity', 'correction', 'math_question',
                      'math_example', 'search', 'intent_instruction')):
