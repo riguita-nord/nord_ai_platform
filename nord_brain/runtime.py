@@ -313,6 +313,37 @@ class Brain:
                                           'geração neuronal contextual', 'dialogue',
                                           previous.get('topic') or message[:240])
                         return generated, 'geração neuronal contextual'
+            # Personal experiences are conversational turns, not unknown facts.
+            # Let the native model continue them, and never record them as
+            # factual questions to be taught by the user.
+            if (previous and len(message.split()) >= 5
+                    and not message.strip().endswith('?')
+                    and not message.lstrip().startswith('/')
+                    and read_math_example(message) is None
+                    and read_math_question(message) is None
+                    and parse_book_command(message) is None):
+                from .dialogue import normalize
+                words = set(normalize(message).split())
+                personal = bool(words & {'eu','meu','minha','tive','fui','estive',
+                                          'aconteceu','senti','passei','hoje','ontem'})
+                if personal:
+                    generated = self.language.generate(message,max_tokens=180)
+                    if generated:
+                        self.awaiting_explanation = False
+                        self.last_question = None
+                        self.dialogue.add(message,generated,
+                                          'continuação neuronal de experiência',
+                                          'dialogue',message[:240])
+                        return generated,'continuação neuronal de experiência'
+                    # A failed generation is not a missing encyclopedic fact.
+                    reply = ('Quero perceber melhor o que me estás a contar. '
+                             'O que aconteceu a seguir?')
+                    self.awaiting_explanation = False
+                    self.last_question = None
+                    self.dialogue.add(message,reply,
+                                      'conversa sem geração fiável',
+                                      'dialogue',message[:240])
+                    return reply,'conversa sem geração fiável'
             # Compose short conversational acts before factual question routing.
             # Unlike exact-phrase matching, this handles "tou bem e tu?" and
             # informal variants. The neural classifier remains available for
