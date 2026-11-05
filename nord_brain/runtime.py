@@ -286,7 +286,7 @@ class Brain:
                 return reply, 'feedback de conversa (sem treino)'
             # An acknowledgement is not a request to discuss the previous
             # reply. Avoid turning "tudo bem" into a recursive explanation.
-            if normalized in ('tudo bem', 'estou bem', 'sim tudo bem', 'bem obrigado',
+            if not message.strip().endswith('?') and normalized in ('tudo bem', 'estou bem', 'sim tudo bem', 'bem obrigado',
                               'tudo otimo', 'tudo tranquilo', 'ta tudo bem'):
                 self.awaiting_explanation = False
                 self.last_question = None
