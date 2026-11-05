@@ -85,7 +85,7 @@ class DialogueTrainingTests(unittest.TestCase):
             try:
                 before=b.core.steps
                 metrics=evaluate(b)
-                self.assertEqual(metrics['heldout_dialogues'],12)
+                self.assertEqual(metrics['heldout_dialogues'],len(curriculum()[1]))
                 self.assertEqual(metrics['legacy_holdouts'],18)
                 result=train(b,updates=2)
                 self.assertIn('aceite' if result['accepted'] else 'rejeitado',
