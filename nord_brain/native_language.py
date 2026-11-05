@@ -75,6 +75,12 @@ def coherent_sample(text: str, *, creative: bool=False) -> bool:
     recognizable = sum(word in common for word in words)
     if recognizable < 2 or recognizable / len(words) < .18:
         return False
+    # Reject byte-level pseudo-Portuguese with isolated letters and
+    # repeated non-lexical syllables. This is a display safeguard only.
+    if sum(len(word) <= 2 for word in words) / len(words) > .32:
+        return False
+    if len(words) >= 8 and recognizable / len(words) < .32:
+        return False
     if sum(len(word) <= 2 for word in words) / len(words) > .55:
         return False
     return True
