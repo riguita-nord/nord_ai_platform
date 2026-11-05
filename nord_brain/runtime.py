@@ -291,6 +291,28 @@ class Brain:
                 self.dialogue.add(message, reply, 'feedback de conversa (sem treino)',
                                   'dialogue', message.strip()[:240])
                 return reply, 'feedback de conversa (sem treino)'
+            # Native-first for ordinary conversation. Explicit commands, factual
+            # requests, teaching and corrections retain their verified routes.
+            # No generated response is ever fed back as a teacher label.
+            if (previous and not message.lstrip().startswith('/')
+                    and len(message) <= 240
+                    and read_math_question(message) is None
+                    and read_math_example(message) is None
+                    and parse_book_command(message) is None
+                    and creative_request(message) is None
+                    and self_query_kind(message) is None):
+                conversational_intent = interpret(message, None, False)
+                if conversational_intent.kind not in (
+                        'fact', 'teach', 'identity', 'correction', 'math_question',
+                        'math_example', 'search', 'intent_instruction'):
+                    generated = self.language.generate(message, max_tokens=180)
+                    if generated:
+                        self.awaiting_explanation = False
+                        self.last_question = None
+                        self.dialogue.add(message, generated,
+                                          'geração neuronal contextual', 'dialogue',
+                                          previous.get('topic') or message[:240])
+                        return generated, 'geração neuronal contextual'
             # Compose short conversational acts before factual question routing.
             # Unlike exact-phrase matching, this handles "tou bem e tu?" and
             # informal variants. The neural classifier remains available for
