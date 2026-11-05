@@ -131,7 +131,6 @@ def main():
                     if not isinstance(entries, list) or not 1 <= len(entries) <= 30:
                         raise ValueError("Adiciona entre 1 e 30 fontes")
                     approved = []
-                    from urllib.parse import urlsplit
                     for entry in entries:
                         if not isinstance(entry, dict):
                             raise ValueError("Fonte inválida")
