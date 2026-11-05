@@ -72,7 +72,7 @@ def clean(value):
     return value[:120000]
 
 
-def pages_batch(batch=20):
+def pages_batch(batch=50):
     data = fetch({"action": "query", "format": "json", "formatversion": "2",
                   "generator": "random", "grnnamespace": "0", "grnlimit": str(batch),
                   "prop": "extracts|info|revisions", "explaintext": "1",
