@@ -52,6 +52,7 @@ class AutoSettings:
     cognitive_lab: bool = False  # explicit AutoSettings keeps legacy tests stable; from_env enables it
     cognitive_tasks_per_tick: int = 1
     portuguese_practice: bool = True  # bounded CPU dialogue training
+    dialogue_practice: bool = False  # only from_env enables this new curriculum
 
     @classmethod
     def from_env(cls):
@@ -68,7 +69,8 @@ class AutoSettings:
                    hypotheses_per_tick=integer('NORD_HYPOTHESES_PER_TICK',3,1,8),
                    cognitive_lab=on('NORD_COGNITIVE_LAB',True),
                    cognitive_tasks_per_tick=integer('NORD_COGNITIVE_TASKS',1,1,3),
-                   portuguese_practice=on('NORD_PORTUGUESE_TRAIN',True))
+                   portuguese_practice=on('NORD_PORTUGUESE_TRAIN',True),
+                   dialogue_practice=on('NORD_DIALOGUE_TRAIN',True))
 
 
 class Autonomy:
@@ -162,6 +164,19 @@ class Autonomy:
                         train_portuguese(brain,1)
                     except ValueError as exc:
                         brain.memory.event('portuguese_training_skipped',str(exc)[:110])
+            # A small number of real Transformer weight updates on whole
+            # conversational exchanges. Independent holdouts and teacher
+            # examples can reject and roll back a bad training session.
+            if settings.dialogue_practice and self._ticks%4==0:
+                from .dialogue_training import curriculum as dialogue_curriculum
+                from .dialogue_training import train as train_dialogues
+                budget=len(dialogue_curriculum()[0])*2
+                used=int(brain.memory.get_meta('dialogue_training_cursor','0'))
+                if used<budget:
+                    try:
+                        train_dialogues(brain,min(2,budget-used))
+                    except ValueError as exc:
+                        brain.memory.event('dialogue_training_skipped',str(exc)[:110])
             if settings.experiments and not brain.memory.review_required():
                 level=max(0,min(MAX_LEVEL,int(brain.memory.get_meta('math_level','0'))))
                 training, heldout=curriculum(level)

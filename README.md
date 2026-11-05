@@ -1,3 +1,63 @@
+# Nord Brain V2.1 — intenções neuronais e português em diálogo
+
+A Nord Brain ganhou uma **cabeça neuronal supervisionada de intenções**,
+treinada em exemplos de pedidos contextuais em português europeu. É uma
+parte pequena do cérebro próprio, inteiramente em PyTorch/CPU, sem Qwen,
+API de IA externa ou pesos pré-treinados. Escolhe entre continuar,
+alongar, mudar o final, escrever capítulos, reescrever, explicar, discutir
+ou **abster-se** quando não reconhece um pedido. Um pedido de revisão da
+conversa **nunca se torna automaticamente uma lição do professor**.
+
+**Limitação:** a cabeça neuronal aprende a *classificar o que fazer*.
+A geração livre e fluente continua limitada pelo Transformer pequeno
+inicializado sem pré-treino. Não deve ser confundida com compreensão
+humana da linguagem.
+
+## Treino mais profundo de português
+
+- O currículo original de 54 exemplos / 18 perguntas reservadas continua.
+- Novo currículo: **180 exemplos com histórico de 2 mensagens** e
+  **60 continuações de avaliação** nunca treinadas.
+- A sessão de treino usa os pesos do **mesmo Transformer Nord**, com checkpoints
+  antes/depois e rollback se degradar muito o português, os testes reservados
+  ou os exemplos ensinados por ti.
+- Os dados de pesquisa na Internet e respostas geradas automaticamente não são
+  usados como respostas verdadeiras.
+- O treino automático opcional executa sessões pequenas a cada quatro ciclos,
+  até um limite, para reduzir o impacto na tua VM.
+
+Atualiza e inicia:
+
+```bash
+cd ~/nord_ai_platform
+git pull origin main
+./nord
+```
+
+Depois experimenta estes comandos:
+
+```text
+/diagnostico-portugues
+/avaliar-dialogos
+/diagnostico-intencao consegues por com um final melhor
+/treinar-dialogos 12
+/avaliar-dialogos
+/avaliar-portugues
+```
+
+A perda **9,4026** que observaste é bastante elevada. A versão nova
+**não reinicia os teus pesos**, nem garante que um novo treino a faça
+descer imediatamente. Usa `/diagnostico-portugues` antes/depois e
+mantém uma cópia de `~/.nord-brain/brain-v2.pt` se pretenderes
+experimentar sessões de treino mais extensas.
+
+A precisão da cabeça de intenções em frases reservadas é mostrada
+pelo comando de diagnóstico. Essa precisão **não mede** a fluência
+do Transformer; para avaliar conversa verdadeira é necessário testar
+diálogos inéditos, paráfrases e consistência a longo prazo.
+
+---
+
 # Nord Brain V2.0 — Transformer próprio, sem segundo modelo
 
 **O cérebro que responde é o Nord Transformer treinado pela própria Nord Brain.**

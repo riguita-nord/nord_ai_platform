@@ -26,6 +26,7 @@ from .cognition import CognitiveLab
 from .creative import creative_request, story
 from .language_backend import LocalLanguage  # legacy, explicit opt-in only
 from .native_language import NativeLanguage
+from .intent_learning import NeuralIntent
 from .story_studio import StoryStudio, BookCommand, parse_book_command
 from .dialogue import DialogueMemory, followup_kind
 from .story_revision import revise_story
@@ -59,6 +60,9 @@ class Brain:
                        else NativeLanguage(self))
         self.stories=StoryStudio(self.data_dir)
         self.dialogue=DialogueMemory(self.data_dir)
+        # Neural classification of contextual revisions, separate from facts.
+        # This small supervised head is part of Nord Brain (no external LLM).
+        self.intent=NeuralIntent(self.data_dir)
         # Every reply, including symbolic reasoning and web research, now
         # becomes context for the local language model and survives restart.
         self.language.context_provider=self.dialogue.context_messages
@@ -264,6 +268,25 @@ class Brain:
         with self.lock:
             previous = self.dialogue.latest()
             kind = followup_kind(message)
+            # Neural head interprets unexpected phrasing against the active
+            # subject; it can override a generic heuristic, but never an
+            # explicit new task, a verified equation or a teacher lesson.
+            if previous and kind in (None,'discuss','refine') and not (
+                    creative_request(message) is not None
+                    or parse_book_command(message) is not None
+                    or read_math_question(message) is not None
+                    or read_math_example(message) is not None
+                    or is_self_knowledge_request(message)):
+                intent_guard=interpret(message,None,False)
+                if intent_guard.kind not in (
+                        'fact','teach','identity','correction','math_question',
+                        'math_example','search','intent_instruction') and (
+                        self_query_kind(message) in (None,'unknown')):
+                    suggested,confidence=self.intent.predict(
+                        message,previous['focus'])
+                    if suggested is not None and (kind is None or
+                            suggested not in ('discuss','explain')):
+                        kind=suggested
             result = None
             if previous and kind is not None:
                 result = self._contextual_reply(message, kind, previous)
@@ -755,6 +778,7 @@ class Brain:
                     'aprovacao_de_hipoteses':self.memory.review_required(),
                     'fontes_oficiais_treinadas':self.memory.source_count(),
                     'linguagem_local':self.language.status(),
+                    'intencoes_neuronais':self.intent.report(),
                     'livro_ativo':self.stories.active(),
                     'dados':str(self.data_dir)}
 

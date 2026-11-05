@@ -33,6 +33,10 @@ Comandos técnicos opcionais: /cerebro, /avaliar, /ajuda, /sair
   /treinar-texto <ficheiro.txt> [6]  (treino de texto corrido que TU aprovas)
   /gerar-neural <tema>    (ver saída direta do teu Transformer, sem verificadores)
   /avaliar-portugues      (perda em frases não usadas no currículo)
+  /treinar-dialogos 12    (treino contextual nos pesos do Transformer, 1–48 passos)
+  /avaliar-dialogos       (perda em conversas portuguesas reservadas)
+  /diagnostico-intencao <frase> (previsão da cabeça neuronal de intenção)
+  /diagnostico-portugues   (compara as duas avaliações de português)
   /diagnostico-pesquisa   (testar pesquisa na Internet e fornecedores)
   /livro novo <tema>        (começa um romance de 10 capítulos)
   /livro novo 12 <tema>     (escolhe o número de capítulos, 3–24)
@@ -102,6 +106,36 @@ def handle(brain,line):
         return ('Ainda não existem perguntas de avaliação independentes.' if result is None
                 else f"Perda em português: {result['loss']} ({result['examples']} perguntas nunca treinadas). "
                      'Isto não equivale a fluência; avalia apenas a previsão dos tokens.')
+    if line.startswith('/treinar-dialogos'):
+        from .dialogue_training import train,describe
+        parts=line.split()
+        if len(parts)>2:raise ValueError('Usa /treinar-dialogos ou /treinar-dialogos 12')
+        updates=int(parts[1]) if len(parts)==2 else 12
+        return describe(train(brain,updates))
+    if line in ('/avaliar-dialogos','/diagnostico-portugues'):
+        from .dialogue_training import evaluate
+        from .portuguese_training import evaluate as old_eval
+        data=evaluate(brain)
+        old=old_eval(brain)
+        warning=(' A perda de português é elevada: os pesos atuais podem '
+                 'ter sofrido interferência entre os diferentes treinos.'
+                 if old and old['loss']>7 else '')
+        return (f"Diálogos com contexto: perda {data['dialogue_loss']} "
+                f"em {data['heldout_dialogues']} exemplos reservados. "
+                f"Português geral: perda {old['loss'] if old else 'n/d'} "
+                f"em {old['examples'] if old else 0} perguntas. "
+                'Apenas métricas de previsão, não fluência.'
+                +warning)
+    if line.startswith('/diagnostico-intencao'):
+        text=line.removeprefix('/diagnostico-intencao').strip()
+        if not text:raise ValueError('Usa /diagnostico-intencao <frase>')
+        last=brain.dialogue.latest()
+        focus=last['focus'] if last else 'dialogue'
+        kind,confidence=brain.intent.predict(text,focus)
+        return (f'Assunto: {focus}. Intenção neuronal: '
+                f'{kind or "incerta / nova questão"}; '
+                f'confiança={confidence:.2f}. '
+                f'Acurácia em frases reservadas={brain.intent.validation_accuracy:.2f}.')
     if line.startswith('/diagnostico-pesquisa'):
         from .internet import search_diagnostic
         term=line.removeprefix('/diagnostico-pesquisa').strip() or 'Elon Musk'
@@ -159,7 +193,7 @@ def main(argv=None):
     parser.add_argument('--data',type=Path,default=Path(os.environ.get('NORD_DATA',str(Path.home()/'.nord-brain'))))
     args=parser.parse_args(argv)
     brain=Brain(args.data)
-    print('Nord Brain v2.0 | Transformer próprio + treino textual CPU + memória de conversa')
+    print('Nord Brain v2.1 | intenções neuronais + treino de diálogos PT + memória contextual')
     print('Fala normalmente. Escreve /ajuda para exemplos ou /sair para terminar.')
     try:
         while True:
