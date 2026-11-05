@@ -52,6 +52,7 @@ Comandos técnicos opcionais: /cerebro, /avaliar, /ajuda, /sair
   /livro ler <n>          (reler um capítulo)
   /livro exportar         (exporta Markdown para a pasta local)
   /diagnostico-linguagem  (mostrar o Transformer Nord e os passos de treino)
+  /auditar-rede          (gradientes e contribuição de todas as camadas; sem treino)
   /janela-contexto (mostra a janela fixa equilibrada de 512 bytes/tokens)
   /contexto             (ver o último assunto guardado)
   /limpar-contexto       (apagar apenas o histórico de conversa)
@@ -62,6 +63,9 @@ pré-treino, por isso a linguagem e o raciocínio ainda serão muito limitados.
 
 
 def handle(brain,line):
+    if line == '/auditar-rede':
+        from .neural_audit import audit
+        return audit(brain)
     # Legacy debugging interface; teaching no longer requires these commands.
     if line.startswith('/ensinar '):
         parts=line[len('/ensinar '):].split('=>',1)
