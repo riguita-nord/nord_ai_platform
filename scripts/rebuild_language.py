@@ -32,6 +32,8 @@ def parse():
                         help="Archive previous experimental checkpoint and start from random weights")
     parser.add_argument("--rate", type=float, default=0.0002)
     parser.add_argument("--save-every", type=int, default=50)
+    parser.add_argument("--text-ratio", type=float, default=0.75,
+                        help="Fraction of updates for next-token text pretraining (0.1-0.95)")
     parser.add_argument("--preview", action="store_true",
                         help="Print raw unseen generations after training")
     return parser.parse_args()
@@ -41,6 +43,8 @@ def main():
     args = parse()
     if not 1 <= args.steps <= 1000000 or not 0 < args.rate <= .001:
         raise SystemExit("Invalid steps or learning rate")
+    if not 0.1 <= args.text_ratio <= 0.95:
+        raise SystemExit("text-ratio must be between 0.1 and 0.95")
     if not 1 <= args.save_every <= 10000:
         raise SystemExit("Invalid checkpoint interval")
     try:
@@ -93,7 +97,7 @@ def main():
         print(f"Holdout loss before: {initial:.4f}", flush=True)
         for i in range(args.steps):
             step = core.steps
-            if i % 4 == 0:
+            if (i % 100) < round(args.text_ratio * 100):
                 # Sample a different region of the full corpus every update.
                 size = min(1400, len(corpus))
                 start = (step * 7919) % max(1, len(corpus) - size + 1)
