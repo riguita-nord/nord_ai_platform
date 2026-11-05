@@ -315,6 +315,15 @@ class Brain:
                     self.dialogue.add(message, reply, 'ato conversacional; interface',
                                       'dialogue', message.strip()[:240])
                     return reply, 'ato conversacional; interface'
+            # Explicit requests to take the initiative outrank short-answer routing.
+            from .social_dialogue import topic_request, suggest_topic
+            if topic_request(message):
+                reply = suggest_topic(self.dialogue)
+                self.awaiting_explanation = False
+                self.last_question = None
+                self.dialogue.add(message, reply, 'iniciativa conversacional',
+                                  'dialogue', 'tema sugerido')
+                return reply, 'iniciativa conversacional'
             # A short answer to the Nord's open question is conversational
             # context, not a fresh factual question or a teacher lesson.
             if (previous and previous['reply'].rstrip().endswith('?')
@@ -331,8 +340,7 @@ class Brain:
                           f'Tu: {message}\\nNord:')
                 continuation = self.language.generate(prompt, max_tokens=180)
                 if not continuation:
-                    continuation = ('Percebi. Queres desenvolver essa ideia ou '
-                                    'preferes que sugira outro tema?')
+                    continuation = suggest_topic(self.dialogue)
                 self.awaiting_explanation = False
                 self.last_question = None
                 self.dialogue.add(message, continuation,
