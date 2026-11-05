@@ -53,7 +53,7 @@ def conversational_answer(message: str, previous_reply: str = '') -> str | None:
         return None
     if not ('falar' in previous and ('sobre' in previous or 'apetece' in previous)):
         return None
-    if words in (['sobre','tudo'],['tudo'],['qualquer','coisa'],['um','pouco','de','tudo']):
+    if words in (['sobre','tudo'],['tudo'],['qualquer','coisa'],['um','pouco','de','tudo'],['sobre','qualquer','coisa'],['sobre','um','pouco','de','tudo']):
         return 'Podemos falar de tudo um pouco! Preferes tecnologia, música ou outro assunto?'
     if words in (['nao','sei'],['tanto','faz'],['tu','escolhe']):
         return 'Então escolho eu: qual foi a coisa mais interessante do teu dia?'
