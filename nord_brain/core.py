@@ -234,10 +234,10 @@ class NeuralCore:
         labels[:, :len(prefix)] = -100  # masked prefix; first answer char at index len(prefix)
         return ids, labels
 
-    def train(self, prompt: str, answer: str, epochs: int = 2, rate: float = 3e-4) -> float:
+    def train(self, prompt: str, answer: str, epochs: int = 2, rate: float = 3e-4, *, dialogue: bool = False) -> float:
         if not 1 <= epochs <= 25 or not 0 < rate <= .01:
             raise ValueError('Épocas ou taxa de aprendizagem inválidas')
-        windows = self._training_windows(prompt, answer, self.model.config.context)
+        windows = self._training_windows(prompt, answer, self.model.config.context, dialogue=dialogue)
         self.model.train()
         for group in self.optimizer.param_groups:
             group['lr'] = rate
@@ -337,14 +337,14 @@ class NeuralCore:
         return sum(value for value,n in losses)/sum(n for value,n in losses)
 
     @staticmethod
-    def _training_windows(prompt: str, answer: str, context: int):
+    def _training_windows(prompt: str, answer: str, context: int, *, dialogue: bool = False):
         """Full-answer supervision using bounded overlapping context windows.
 
         Each predicted answer byte is scored once; prompt bytes are context,
         not training targets. Handles UTF-8 and long explanations without
         silently discarding the answer.
         """
-        prefix = ('Pergunta: ' + prompt + '\nResposta: ').encode('utf-8')
+        prefix = ((prompt + '\nNord: ') if dialogue else ('Pergunta: ' + prompt + '\nResposta: ')).encode('utf-8')
         targets = answer.encode('utf-8')
         if not targets:
             raise ValueError('Resposta vazia')
@@ -367,7 +367,7 @@ class NeuralCore:
 
     @torch.inference_mode()
     def generate(self, prompt: str, max_bytes: int = 100, temperature: float = .7, *, dialogue: bool = False) -> str:
-        prefix = ('Pergunta: ' + prompt + '\nResposta: ').encode('utf-8')
+        prefix = ((prompt + '\nNord: ') if dialogue else ('Pergunta: ' + prompt + '\nResposta: ')).encode('utf-8')
         # Keep enough room for generation; drop oldest prompt bytes if needed.
         max_length = self.model.config.context
         tokens = [BOS] + list(prefix)[-(max_length - 1):]
