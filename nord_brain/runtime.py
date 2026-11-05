@@ -28,6 +28,7 @@ from .language_backend import LocalLanguage  # legacy, explicit opt-in only
 from .native_language import NativeLanguage
 from .intent_learning import NeuralIntent
 from .context_intent import ContextIntent
+from .social_dialogue import social_act, social_response
 from .story_studio import StoryStudio, BookCommand, parse_book_command
 from .dialogue import DialogueMemory, followup_kind
 from .story_revision import revise_story
@@ -286,24 +287,23 @@ class Brain:
                 self.dialogue.add(message, reply, 'feedback de conversa (sem treino)',
                                   'dialogue', message.strip()[:240])
                 return reply, 'feedback de conversa (sem treino)'
-            # Broad social-turn routing; the neural model determines the
-            # meaning using the preceding reply, not an exact phrase match.
-            social_words = {'bem', 'tou', 'estou', 'tudo', 'fixe', 'tranquilo',
-                            'otimo', 'pois', 'obrigado', 'ta', 'esta', 'sim'}
-            words = set(normalized.split())
-            social_turn = (bool(words & {'bem', 'fixe', 'tranquilo', 'otimo'})
-                           and words <= social_words and len(words) <= 6)
-            if previous and social_turn:
-                intent, confidence = self.context_intent.predict(previous['reply'], message)
-                if intent is not None:
-                    replies = {'answer': 'Ainda bem! Como correu o teu dia?',
-                               'question': 'Estou por aqui e pronto para conversar. E contigo?',
-                               'acknowledge': 'Combinado. Queres avançar?'}
-                    reply = replies[intent]
+            # Compose short conversational acts before factual question routing.
+            # Unlike exact-phrase matching, this handles "tou bem e tu?" and
+            # informal variants. The neural classifier remains available for
+            # ambiguous turns; neither mechanism claims free-form fluency.
+            act = social_act(message, previous['reply'] if previous else '')
+            if previous and act is not None:
+                if act in ('answer', 'question', 'acknowledge'):
+                    predicted, confidence = self.context_intent.predict(previous['reply'], message)
+                    if predicted is not None and act == 'acknowledge':
+                        act = predicted
+                reply = social_response(act)
+                if reply:
                     self.awaiting_explanation = False
                     self.last_question = None
-                    self.dialogue.add(message, reply, 'intenção neuronal; resposta de interface', 'dialogue', message.strip()[:240])
-                    return reply, 'intenção neuronal; resposta de interface'
+                    self.dialogue.add(message, reply, 'ato conversacional; interface',
+                                      'dialogue', message.strip()[:240])
+                    return reply, 'ato conversacional; interface'
             kind = followup_kind(message)
             # Neural head interprets unexpected phrasing against the active
             # subject; it can override a generic heuristic, but never an
