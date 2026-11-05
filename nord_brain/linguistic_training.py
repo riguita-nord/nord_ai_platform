@@ -117,16 +117,16 @@ def _checks(brain):
         "ORDER BY id DESC LIMIT 4"
     ).fetchall()
     older = brain.memory.tests(4)
-    dialogue = tuple((training_prompt(turns, brain.core.model.config.context), answer) for turns, answer in DIALOGUE_HOLDOUT)
+    dialogue = tuple((training_prompt(turns, brain.language_core.model.config.context), answer) for turns, answer in DIALOGUE_HOLDOUT)
     groups = (HOLDOUT, natural[:5], context, general, teacher, older, dialogue,
-              contextual_examples(brain.core.model.config.context, holdout=True))
+              contextual_examples(brain.language_core.model.config.context, holdout=True))
     return tuple(tuple((q, a) for q, a in group if
                        not brain.memory.lesson_was_trained(q))
                  for group in groups)
 
 
 def _scores(brain, groups):
-    return tuple(brain.core.score(group) if group else None for group in groups)
+    return tuple(brain.language_core.score(group) if group else None for group in groups)
 
 
 def _approved_corpus(path):
@@ -159,7 +159,7 @@ def evaluate(brain):
             'natural_loss': round(scores[1], 4) if scores[1] is not None else None,
             'context_loss': round(scores[2], 4) if scores[2] is not None else None,
             'portuguese_loss': round(scores[3], 4) if scores[3] is not None else None,
-            'heldout': len(groups[0]), 'steps': brain.core.steps,
+            'heldout': len(groups[0]), 'steps': brain.language_core.steps,
             'note': 'Perdas de previsão em frases reservadas; não provam fluência.'
         }
 
@@ -181,11 +181,11 @@ def train(brain, updates=12, *, path=None, rate=.00006):
         before = _scores(brain, groups)
         # Anchor to the accepted checkpoint, never to rejected trial weights.
         anchor = {name: param.detach().clone()
-                  for name, param in brain.core.model.named_parameters()}
+                  for name, param in brain.language_core.model.named_parameters()}
         general_train, _ = portuguese_curriculum()
         contextual_train, _ = contextual_curriculum()
-        dialogue_train = tuple((training_prompt(turns, brain.core.model.config.context), answer) for turns, answer in DIALOGUE_TRAIN)
-        contextual_multi = contextual_examples(brain.core.model.config.context)
+        dialogue_train = tuple((training_prompt(turns, brain.language_core.model.config.context), answer) for turns, answer in DIALOGUE_TRAIN)
+        contextual_multi = contextual_examples(brain.language_core.model.config.context)
         pools = (TRAIN, dialogue_train, NATURAL_TRAIN, contextual_multi,
                  dialogue_train, TRAIN, contextual_train, contextual_multi,
                  dialogue_train, general_train)
@@ -193,8 +193,8 @@ def train(brain, updates=12, *, path=None, rate=.00006):
             "SELECT question,answer FROM lessons WHERE origin='teacher' "
             "ORDER BY id DESC LIMIT 64").fetchall())
         cursor = int(brain.memory.get_meta('language_curriculum_cursor', '0'))
-        start_steps = brain.core.steps
-        brain.core.save()
+        start_steps = brain.language_core.steps
+        brain.language_core.save()
         trained = 0
         last_loss = None
         accepted = False
@@ -202,19 +202,19 @@ def train(brain, updates=12, *, path=None, rate=.00006):
         after = before
         attempts = 0
         try:
-            ceilings = (.05, .08, .10, .10, .05, .15, .10, .10)
+            ceilings = (.05, .08, .10, .10, .05, float('inf'), .10, .10)
             labels = ('linguagem', 'conversa natural', 'contexto', 'português',
                       'lições do professor', 'testes anteriores', 'diálogo multi-turno',
                       'interpretação contextual inédita')
             for multiplier in (1.0, .25, .0625, .015625, .00390625):
                 attempts += 1
-                brain.core.load()
+                brain.language_core.load()
                 trained = 0
                 for n in range(updates):
                     index = cursor + n
                     step_rate = rate * multiplier
                     if index % 12 == 0:
-                        last_loss = brain.core.train_text(corpus, updates=1,
+                        last_loss = brain.language_core.train_text(corpus, updates=1,
                                                           rate=step_rate * .65)
                         trained += 1
                         continue
@@ -231,13 +231,13 @@ def train(brain, updates=12, *, path=None, rate=.00006):
                     # while inference always requested "Tu/Nord".
                     dialogue_question = (question if question.startswith('Tu: ')
                                          else 'Tu: ' + question)
-                    last_loss = brain.core.train(dialogue_question, answer, epochs=1,
+                    last_loss = brain.language_core.train(dialogue_question, answer, epochs=1,
                                                  rate=step_rate, dialogue=True)
                     trained += 1
                     # Conservative weight anchoring prevents rapid drift.
                     # This is a lightweight L2-style approximation, not EWC.
                     with torch.no_grad():
-                        for name, param in brain.core.model.named_parameters():
+                        for name, param in brain.language_core.model.named_parameters():
                             param.lerp_(anchor[name], .005)
                 after = _scores(brain, groups)
                 regressions = [
@@ -252,13 +252,13 @@ def train(brain, updates=12, *, path=None, rate=.00006):
                 if accepted:
                     break
             if accepted:
-                brain.core.save()
+                brain.language_core.save()
                 brain.memory.set_meta('language_curriculum_cursor', str(cursor + updates))
                 brain.memory.metric('language_v3_heldout_loss', after[0])
                 brain.memory.event('language_v3_training',
                     f'update={trained}; attempts={attempts}; heldout={before[0]:.4f}->{after[0]:.4f}', after[0])
             else:
-                brain.core.load()
+                brain.language_core.load()
                 brain.memory.event('language_v3_rejected',
                     'Regressão após tentativas com taxas de aprendizagem reduzidas')
             return {
@@ -266,7 +266,7 @@ def train(brain, updates=12, *, path=None, rate=.00006):
                 'regressions': regressions,
                 'attempts': attempts,
                 'examples': trained,
-                'steps': brain.core.steps - start_steps if accepted else 0,
+                'steps': brain.language_core.steps - start_steps if accepted else 0,
                 'before': round(before[0], 4),
                 'after': round(after[0], 4),
                 'natural_before': round(before[1], 4) if before[1] is not None else None,
@@ -275,7 +275,7 @@ def train(brain, updates=12, *, path=None, rate=.00006):
                 'last_training_loss': round(last_loss, 4) if last_loss is not None else None,
             }
         except Exception:
-            brain.core.load()
+            brain.language_core.load()
             raise
 
 
