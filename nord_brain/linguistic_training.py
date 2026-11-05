@@ -15,6 +15,7 @@ from .conversation_corpus import TRAINING as NATURAL_TRAIN, HOLDOUT as NATURAL_H
 from .dialogue_training import curriculum as contextual_curriculum
 from .portuguese_training import curriculum as portuguese_curriculum
 from .dialogue_format import training_prompt
+from .contextual_dataset import examples as contextual_examples
 
 
 # Exemplos humanos originais: linguagem quotidiana, composicionalidade,
@@ -117,7 +118,8 @@ def _checks(brain):
     ).fetchall()
     older = brain.memory.tests(4)
     dialogue = tuple((training_prompt(turns, brain.core.model.config.context), answer) for turns, answer in DIALOGUE_HOLDOUT)
-    groups = (HOLDOUT, natural[:5], context, general, teacher, older, dialogue)
+    groups = (HOLDOUT, natural[:5], context, general, teacher, older, dialogue,
+              contextual_examples(brain.core.model.config.context, holdout=True))
     return tuple(tuple((q, a) for q, a in group if
                        not brain.memory.lesson_was_trained(q))
                  for group in groups)
@@ -183,8 +185,9 @@ def train(brain, updates=12, *, path=None, rate=.00006):
         general_train, _ = portuguese_curriculum()
         contextual_train, _ = contextual_curriculum()
         dialogue_train = tuple((training_prompt(turns, brain.core.model.config.context), answer) for turns, answer in DIALOGUE_TRAIN)
-        pools = (TRAIN, dialogue_train, NATURAL_TRAIN, dialogue_train,
-                 contextual_train, TRAIN, general_train)
+        contextual_multi = contextual_examples(brain.core.model.config.context)
+        pools = (TRAIN, dialogue_train, NATURAL_TRAIN, contextual_multi,
+                 contextual_train, contextual_multi, general_train)
         teacher_replay = tuple(brain.memory.db.execute(
             "SELECT question,answer FROM lessons WHERE origin='teacher' "
             "ORDER BY id DESC LIMIT 64").fetchall())
@@ -198,9 +201,10 @@ def train(brain, updates=12, *, path=None, rate=.00006):
         after = before
         attempts = 0
         try:
-            ceilings = (.05, .08, .10, .10, .05, .10, .10)
+            ceilings = (.05, .08, .10, .10, .05, .10, .10, .10)
             labels = ('linguagem', 'conversa natural', 'contexto', 'português',
-                      'lições do professor', 'testes anteriores', 'diálogo multi-turno')
+                      'lições do professor', 'testes anteriores', 'diálogo multi-turno',
+                      'interpretação contextual inédita')
             for multiplier in (1.0, .25, .0625):
                 attempts += 1
                 brain.core.load()
