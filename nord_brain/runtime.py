@@ -52,7 +52,7 @@ class Brain:
         self.core=NeuralCore(self.data_dir/'brain-v2.pt',config=profiles[profile])
         # Upgrade existing learned weights rather than replacing the checkpoint.
         # Keep a one-time backup for rollback; depth expansion is opt-in for tiny.
-        if profile != 'tiny' and self.core.model.config.layers < 8:
+        if self.core.model.config.layers < 8:
             import shutil
             checkpoint = self.data_dir/'brain-v2.pt'
             backup = self.data_dir/'brain-v2.pre-8layers.pt'
