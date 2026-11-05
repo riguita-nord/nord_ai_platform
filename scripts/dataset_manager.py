@@ -7,6 +7,7 @@ No dependencies beyond Python's standard library.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import html
 import json
@@ -173,4 +174,16 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # Cross-process lock: protects shared train/eval/manifest from concurrent
+    # collector instances, including orphaned jobs after dashboard restart.
+    lock_dir = Path("training/dataset")
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    with (lock_dir / ".collection.lock").open("a+") as lock:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise SystemExit(
+                "Já existe uma recolha em execução. "
+                "Aguarda ou termina o processo anterior antes de iniciar outra."
+            )
+        main()
