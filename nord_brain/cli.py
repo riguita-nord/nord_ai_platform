@@ -122,6 +122,8 @@ def handle(brain,line):
                  if old and old['loss']>7 else '')
         return (f"Diálogos com contexto: perda {data['dialogue_loss']} "
                 f"em {data['heldout_dialogues']} exemplos reservados. "
+                f"Conversa natural: perda {data['natural_loss']} "
+                f"em {data['natural_holdouts']} exemplos reservados. "
                 f"Português geral: perda {old['loss'] if old else 'n/d'} "
                 f"em {old['examples'] if old else 0} perguntas. "
                 'Apenas métricas de previsão, não fluência.'
