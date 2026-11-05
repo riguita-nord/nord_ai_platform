@@ -29,6 +29,7 @@ HELP='''Fala normalmente comigo. Exemplos:
   Pausa aprendizagem. / Retoma aprendizagem.
 
 Comandos técnicos opcionais: /cerebro, /avaliar, /ajuda, /sair
+  /importar-corpus <url_https_txt> (descarrega texto; não treina automaticamente)
   /treinar-linguagem [12] [ficheiro.txt]  (treino misto de frases, diálogos e texto PT-PT)
   /avaliar-linguagem     (avaliação independente da linguagem e do contexto)
   /treinar-portugues 20    (treino REAL nos pesos, CPU, com avaliação separada)
@@ -81,6 +82,12 @@ def handle(brain,line):
         domain=parts[1] if len(parts)>1 else 'tudo'
         amount=int(parts[2]) if len(parts)>2 else 1
         return brain.simulate_cognition(domain,amount)[0]
+    if line.startswith('/importar-corpus '):
+        from .corpus_import import import_text
+        url=line.split(None,1)[1].strip()
+        path,meta=import_text(url,brain.data_dir/'corpus_importado')
+        return (f'Corpus importado: {path} ({meta["bytes"]} bytes). '
+                f'Revê e aprova com /treinar-linguagem 48 {path}')
     if line.startswith('/treinar-linguagem'):
         from .linguistic_training import train, describe
         args=shlex.split(line)
