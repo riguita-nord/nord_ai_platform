@@ -114,8 +114,11 @@ class NativeLanguage:
         question=prompt_from_history(prompt,history,core.model.config.context) if history else prompt
         budget=min(125,max(42,int(max_tokens)),max(42,core.model.config.context//2))
         temperature=.82 if creative else .61
-        candidate=core.generate(question,max_bytes=budget,temperature=temperature)
-        return candidate if coherent_sample(candidate,creative=creative) else None
+        from .candidate_evaluation import choose_candidate
+        count=max(1,min(4,int(os.getenv('NORD_CANDIDATES','2'))))
+        candidates=[core.generate(question,max_bytes=budget,temperature=temperature)
+                    for _ in range(count)]
+        return choose_candidate(candidates,question)
 
     def status(self) -> str:
         return ('Nord Transformer próprio (CPU, pesos treináveis); '
