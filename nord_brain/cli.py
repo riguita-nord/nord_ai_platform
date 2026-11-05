@@ -1,6 +1,7 @@
 """Terminal conversation first. Diagnostic commands are optional."""
 from __future__ import annotations
 import argparse
+import fcntl
 import json
 import os
 import shlex
@@ -236,6 +237,17 @@ def main(argv=None):
     parser=argparse.ArgumentParser(description='Nord Brain: conversa natural e aprendizagem autónoma experimental')
     parser.add_argument('--data',type=Path,default=Path(os.environ.get('NORD_DATA',str(Path.home()/'.nord-brain'))))
     args=parser.parse_args(argv)
+    # A single writer owns the checkpoint for the entire terminal session.
+    # flock is released by the OS even if the process crashes.
+    args.data.mkdir(parents=True, exist_ok=True)
+    lock_file = (args.data / '.nord-instance.lock').open('a+')
+    try:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock_file.close()
+        print('ERRO: já existe outra instância Nord a utilizar este cérebro. '
+              'Fecha-a antes de iniciar outra sessão.')
+        return 2
     brain=Brain(args.data)
     print('Nord Brain v2.1 | intenções neuronais + treino de diálogos PT + memória contextual')
     print('Fala normalmente. Escreve /ajuda para exemplos ou /sair para terminar.')
