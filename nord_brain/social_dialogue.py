@@ -58,3 +58,31 @@ def conversational_answer(message: str, previous_reply: str = '') -> str | None:
     if words in (['nao','sei'],['tanto','faz'],['tu','escolhe']):
         return 'Então escolho eu: qual foi a coisa mais interessante do teu dia?'
     return None
+
+
+def topic_request(message: str) -> bool:
+    """Detect a request for the assistant to initiate a subject, not an answer."""
+    words=_words(message)
+    tokens=set(words)
+    choose=bool(tokens & {'escolhe','escolher','sugere','sugerir','inventa','propoe'})
+    topic=bool(tokens & {'tema','assunto','conversa','aleatorio','qualquer'})
+    return (choose and topic) or words in (
+        ['uma','coisa','qualquer'], ['tu','escolhe'], ['tanto','faz'])
+
+
+def suggest_topic(dialogue) -> str:
+    """Cycle across distinct open-ended subjects; no claim of neural understanding."""
+    topics=(
+        'Já pensaste como seria viver numa cidade construída no oceano? O que achas que mudaria no dia a dia?',
+        'Vamos falar de tecnologia: que invenção gostavas que existisse daqui a dez anos?',
+        'Tenho um tema: se pudesses aprender uma habilidade instantaneamente, qual escolherias?',
+        'E se as pessoas pudessem explorar outros planetas como hoje viajam entre países? Gostavas de ir?',
+        'Vamos imaginar uma coisa: como seria um videojogo em que cada personagem tivesse a sua própria história?',
+    )
+    previous=dialogue.latest()
+    last=previous['reply'] if previous else ''
+    # Avoid repeating the immediately preceding topic even after a restart.
+    for item in topics:
+        if item != last:
+            return item
+    return topics[0]
