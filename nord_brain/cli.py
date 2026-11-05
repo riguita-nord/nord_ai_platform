@@ -51,6 +51,7 @@ Comandos técnicos opcionais: /cerebro, /avaliar, /ajuda, /sair
   /livro ler <n>          (reler um capítulo)
   /livro exportar         (exporta Markdown para a pasta local)
   /diagnostico-linguagem  (mostrar o Transformer Nord e os passos de treino)
+  /janela-contexto [512|1024|2048] (aumenta a janela preservando os pesos)
   /contexto             (ver o último assunto guardado)
   /limpar-contexto       (apagar apenas o histórico de conversa)
 A aprendizagem, a revisão e a decisão experimental de crescimento funcionam
@@ -98,6 +99,23 @@ def handle(brain,line):
         path,meta=import_text(url,brain.data_dir/'corpus_importado')
         return (f'Corpus importado: {path} ({meta["bytes"]} bytes). '
                 f'Revê e aprova com /treinar-linguagem 48 {path}')
+    if line.startswith('/janela-contexto'):
+        args=line.split()
+        if len(args)==1:
+            return f'Janela atual: {brain.core.model.config.context} bytes/tokens.'
+        if len(args)!=2 or args[1] not in ('512','1024','2048'):
+            raise ValueError('Usa /janela-contexto 512, 1024 ou 2048')
+        target=int(args[1])
+        with brain.lock:
+            current=brain.core.model.config.context
+            if target < current:
+                raise ValueError('Este comando só permite aumentar a janela')
+            if target > current:
+                brain.core.model.config.context=target
+                brain.core.save()
+        return (f'Janela de contexto: {current} → {target}. '
+                'Pesos e otimizador preservados. '
+                'É necessário treinar com diálogos longos para aproveitar a janela.')
     if line.startswith('/treinar-linguagem'):
         from .linguistic_training import train, describe
         args=shlex.split(line)
