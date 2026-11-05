@@ -25,6 +25,7 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "rebuild_language.py"
 COLLECTOR = ROOT / "scripts" / "dataset_manager.py"
+URL_COLLECTOR = ROOT / "scripts" / "collect_urls.py"
 PAGE = ROOT / "scripts" / "trainer_ui.html"
 DATASET = ROOT / "training" / "dataset" / "train.txt"
 
@@ -45,6 +46,7 @@ def main():
     data_dir.mkdir(parents=True, exist_ok=True)
     log_path = data_dir / "trainer.log"
     feedback_path = data_dir / "trainer-feedback.jsonl"
+    url_manifest = data_dir / "trainer-approved-urls.jsonl"
     checkpoint = data_dir / "language-v1.pt"
     state = {"process": None, "last_exit": None, "kind": None}
     guard = threading.Lock()
@@ -123,6 +125,38 @@ def main():
                         with feedback_path.open("a", encoding="utf-8") as f:
                             f.write(json.dumps(record, ensure_ascii=False) + "\n")
                     self.send_json(201, {"saved": True, "note": "Exemplo aprovado guardado; ainda não incluído no treino"})
+                    return
+                if path == "/api/collect-urls":
+                    entries = payload.get("sources", [])
+                    if not isinstance(entries, list) or not 1 <= len(entries) <= 30:
+                        raise ValueError("Adiciona entre 1 e 30 fontes")
+                    approved = []
+                    from urllib.parse import urlsplit
+                    for entry in entries:
+                        if not isinstance(entry, dict):
+                            raise ValueError("Fonte inválida")
+                        url = entry.get("url", "")
+                        license_id = entry.get("license", "")
+                        if not isinstance(url, str) or len(url) > 2048 or urlsplit(url).scheme != "https":
+                            raise ValueError("URL HTTPS inválido")
+                        if license_id not in ("CC0-1.0", "CC-BY-4.0", "CC-BY-SA-4.0", "PUBLIC-DOMAIN"):
+                            raise ValueError("Licença não suportada")
+                        approved.append({"url": url, "license": license_id, "language": "pt-mixed"})
+                    with guard:
+                        process = state["process"]
+                        if process is not None and process.poll() is None:
+                            self.send_json(409, {"error": "Já existe uma operação em execução"})
+                            return
+                        with url_manifest.open("w", encoding="utf-8") as f:
+                            for entry in approved:
+                                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                        cmd = [sys.executable, "-u", str(URL_COLLECTOR), "--manifest", str(url_manifest)]
+                        with log_path.open("w", encoding="utf-8") as logfile:
+                            state["process"] = subprocess.Popen(cmd, cwd=ROOT, stdin=subprocess.DEVNULL,
+                                stdout=logfile, stderr=subprocess.STDOUT, start_new_session=True)
+                            state["kind"] = "urls"
+                            state["last_exit"] = None
+                    self.send_json(202, {"started": True, "kind": "urls"})
                     return
                 if path == "/api/collect":
                     target_mb = int(payload.get("target_mb", 10))
