@@ -35,21 +35,13 @@ def fetch(params, attempts=4):
                 return json.load(response)
         except HTTPError as exc:
             if exc.code == 429:
-                # Respect Retry-After and stop after bounded retries; do not
-                # rotate identities, proxies, or evade Wikimedia rate limits.
                 raw = exc.headers.get("Retry-After", "") if exc.headers else ""
-                try:
-                    delay = max(60, min(900, int(raw)))
-                except (ValueError, TypeError):
-                    delay = min(300, 60 * (n + 1))
-                if n == attempts - 1:
-                    raise RuntimeError(
-                        "Wikipedia HTTP 429: limite de pedidos atingido. "
-                        "Recomeça mais tarde; os artigos guardados serão reutilizados."
-                    ) from exc
-                print(f"HTTP 429: a aguardar {delay}s antes de repetir...", file=sys.stderr, flush=True)
-                time.sleep(delay)
-                continue
+                wait = f" Retry-After={raw}s." if raw else ""
+                raise RuntimeError(
+                    "Wikipedia devolveu HTTP 429 (limite de pedidos)." + wait +
+                    " Recolha interrompida sem perder os artigos guardados. "
+                    "Tenta mais tarde ou utiliza um dump oficial da Wikimedia."
+                ) from exc
             if n == attempts - 1 or exc.code in (400, 401, 403, 404):
                 raise RuntimeError(f"Wikipedia API unavailable: {exc}") from exc
             time.sleep(min(30, 3 * (n + 1)))
