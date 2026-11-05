@@ -85,22 +85,28 @@ def _probes(brain):
     # + teacher corrections. Keep evaluation bounded on a small VM.
     _,heldout=curriculum()
     valid=[row for row in heldout if not brain.memory.lesson_was_trained(row[0])]
-    dialogue=valid[::5][:12] if len(valid)>12 else valid
+    # More varied coverage than a fixed 12-item subsample. Rotate evaluation
+    # through all 60 held-out variants on every session.
+    dialogue=valid
     from .portuguese_training import curriculum as base
     old=[row for row in base()[1] if not brain.memory.lesson_was_trained(row[0])]
     teacher=brain.memory.db.execute(
         "SELECT question,answer FROM lessons WHERE origin='teacher' ORDER BY id DESC LIMIT 4"
     ).fetchall()
     other=brain.memory.tests(4)
-    return dialogue,old,teacher,other
+    from .conversation_corpus import HOLDOUT
+    natural=[row for row in HOLDOUT if not brain.memory.lesson_was_trained(row[0])]
+    return dialogue,old,teacher,other,natural
 
 
 def evaluate(brain) -> dict:
     with brain.lock:
-        dialogue,old,_,_=_probes(brain)
+        dialogue,old,_,_,natural=_probes(brain)
         return {'dialogue_loss':round(brain.core.score(dialogue),4) if dialogue else None,
                 'portuguese_loss':round(brain.core.score(old),4) if old else None,
                 'heldout_dialogues':len(dialogue),'legacy_holdouts':len(old),
+                'natural_loss':round(brain.core.score(natural),4) if natural else None,
+                'natural_holdouts':len(natural),
                 'steps':brain.core.steps,
                 'note':'Perda em exemplos nunca treinados; não prova fluência.'}
 
@@ -111,21 +117,34 @@ def train(brain,updates: int=12,rate: float=.00006) -> dict:
     if not 0<rate<=.0003:
         raise ValueError('Taxa de aprendizagem deve ser conservadora (máximo 0.0003)')
     rows,_=curriculum()
+    from .portuguese_training import curriculum as portuguese_curriculum
+    from .conversation_corpus import TRAINING
+    portuguese_rows,_=portuguese_curriculum()
     with brain.lock:
         if brain.memory.training_paused():
             raise ValueError('A aprendizagem está pausada')
-        dialogue,old,teacher,other=_probes(brain)
+        dialogue,old,teacher,other,natural=_probes(brain)
         if not dialogue:
             raise ValueError('Não há frases de avaliação reservadas')
         before=tuple(brain.core.score(block) if block else None
-                     for block in (dialogue,old,teacher,other))
+                     for block in (dialogue,old,teacher,other,natural))
         cursor=int(brain.memory.get_meta('dialogue_training_cursor','0'))
         baseline_steps=brain.core.steps
         brain.core.save()
         trained=0
         try:
             for n in range(updates):
-                q,a=rows[(cursor+n)%len(rows)]
+                # Mixed curriculum: contextual turns, natural conversation and
+                # general Portuguese all update the same neural weights.
+                # Each category has its own deterministic rotation.
+                phase=(cursor+n)%5
+                if phase==3:
+                    pool=TRAINING
+                elif phase==4:
+                    pool=portuguese_rows
+                else:
+                    pool=rows
+                q,a=pool[((cursor+n)//5 + (cursor+n)%3 * 17)%len(pool)]
                 if (brain.memory.is_holdout(q) or brain.memory.is_training_blocked(q)
                         or brain.memory.is_cognitive_probe(q)):
                     continue
@@ -137,7 +156,7 @@ def train(brain,updates: int=12,rate: float=.00006) -> dict:
                 math.isfinite(current) and (
                     current<=baseline*multiplier+absolute)
                 for baseline,current,multiplier,absolute in zip(
-                    before,after,(1.025,1.035,1.015,1.045),(.025,.035,.03,.04))
+                    before,after,(1.025,1.035,1.015,1.045,1.035),(.025,.035,.03,.04,.035))
                 if baseline is not None and current is not None)
             if accepted:
                 brain.core.save()
@@ -155,6 +174,8 @@ def train(brain,updates: int=12,rate: float=.00006) -> dict:
                 'dialogue_after':round(after[0],4),
                 'portuguese_before':round(before[1],4) if before[1] is not None else None,
                 'portuguese_after':round(after[1],4) if after[1] is not None else None,
+                'natural_before':round(before[4],4) if before[4] is not None else None,
+                'natural_after':round(after[4],4) if after[4] is not None else None,
                 'cursor':cursor+updates if accepted else cursor,
             }
         except Exception:
