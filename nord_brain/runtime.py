@@ -50,6 +50,16 @@ class Brain:
         if profile not in profiles:
             raise ValueError('NORD_BRAIN_PRESET deve ser tiny, small ou medium')
         self.core=NeuralCore(self.data_dir/'brain-v2.pt',config=profiles[profile])
+        # Upgrade existing learned weights rather than replacing the checkpoint.
+        # Keep a one-time backup for rollback; depth expansion is opt-in for tiny.
+        if profile != 'tiny' and self.core.model.config.layers < 8:
+            import shutil
+            checkpoint = self.data_dir/'brain-v2.pt'
+            backup = self.data_dir/'brain-v2.pre-8layers.pt'
+            if checkpoint.exists() and not backup.exists():
+                shutil.copy2(checkpoint, backup)
+            self.core.expand_depth(8)
+            self.core.save()
         # Fixed balanced context for CPU; RoPE has no learned position table.
         if self.core.model.config.context != 512:
             self.core.model.config.context = 512
