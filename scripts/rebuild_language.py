@@ -43,7 +43,14 @@ def main():
         raise SystemExit("Invalid steps or learning rate")
     if not 1 <= args.save_every <= 10000:
         raise SystemExit("Invalid checkpoint interval")
-    source = args.corpus.expanduser().resolve(strict=True)
+    try:
+        source = args.corpus.expanduser().resolve(strict=True)
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        raise SystemExit(
+            f"Corpus não encontrado: {args.corpus.expanduser()}\n"
+            "Cria a pasta e coloca nela um ficheiro .txt UTF-8 com pelo menos 1 MB "
+            "de texto português autorizado. Exemplo: mkdir -p ~/corpus"
+        ) from exc
     if source.suffix.lower() != ".txt" or not source.is_file():
         raise SystemExit("Corpus must be a UTF-8 .txt file")
     if not 1000000 <= source.stat().st_size <= 500000000:
