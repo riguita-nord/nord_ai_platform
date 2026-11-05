@@ -202,7 +202,7 @@ def train(brain, updates=12, *, path=None, rate=.00006):
         after = before
         attempts = 0
         try:
-            ceilings = (.05, .08, .10, .10, .05, .10, .10, .10)
+            ceilings = (.05, .08, .10, .10, .05, .15, .10, .10)
             labels = ('linguagem', 'conversa natural', 'contexto', 'português',
                       'lições do professor', 'testes anteriores', 'diálogo multi-turno',
                       'interpretação contextual inédita')
@@ -246,7 +246,9 @@ def train(brain, updates=12, *, path=None, rate=.00006):
                     if new is not None and (not math.isfinite(new) or
                         (old is not None and new > old + margin))
                 ]
-                accepted = trained > 0 and not regressions
+                accepted = (trained > 0 and not regressions and
+                            after[0] is not None and math.isfinite(after[0]) and
+                            before[0] is not None and after[0] < before[0] - .01)
                 if accepted:
                     break
             if accepted:
