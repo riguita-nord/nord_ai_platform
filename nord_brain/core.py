@@ -358,7 +358,12 @@ class NeuralCore:
         self.model.eval()
         losses=[]
         for question,answer in examples:
-            for ids,labels in self._training_windows(question,answer,self.model.config.context):
+            # Linguistic holdout must evaluate the same Tu/Nord format
+            # used during real conversational inference.
+            dialogue_question = (question if question.startswith('Tu: ')
+                                 else 'Tu: ' + question)
+            for ids,labels in self._training_windows(
+                    dialogue_question,answer,self.model.config.context,dialogue=True):
                 logits=self.model(ids)
                 per=F.cross_entropy(logits.reshape(-1,VOCAB_SIZE),labels.reshape(-1),
                                     ignore_index=-100,reduction='sum')
