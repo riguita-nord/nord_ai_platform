@@ -199,6 +199,8 @@ class NeuralCore:
             return False
         if target_layers > 12:
             raise ValueError('Máximo de 12 camadas')
+        if self.model.training:
+            self.model.eval()
         old_optimizer = self.optimizer
         old_params = list(self.model.parameters())
         old_state = {p: state for p, state in old_optimizer.state.items()}
