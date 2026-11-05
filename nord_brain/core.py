@@ -223,7 +223,8 @@ class NeuralCore:
     @staticmethod
     def _example(prompt: str, answer: str, context: int):
         # Only target the answer's tokens, not the question text.
-        prefix = ('Pergunta: ' + prompt + '\nResposta: ').encode('utf-8')
+        prefix = ((prompt + '\nNord: ') if dialogue else
+                  ('Pergunta: ' + prompt + '\nResposta: ')).encode('utf-8')
         suffix = answer.encode('utf-8')
         if len(prefix) + len(suffix) + 2 > context:
             raise ValueError(f'Exemplo demasiado longo para contexto de {context} tokens')
@@ -365,7 +366,7 @@ class NeuralCore:
         return result
 
     @torch.inference_mode()
-    def generate(self, prompt: str, max_bytes: int = 100, temperature: float = .7) -> str:
+    def generate(self, prompt: str, max_bytes: int = 100, temperature: float = .7, *, dialogue: bool = False) -> str:
         prefix = ('Pergunta: ' + prompt + '\nResposta: ').encode('utf-8')
         # Keep enough room for generation; drop oldest prompt bytes if needed.
         max_length = self.model.config.context
@@ -386,6 +387,10 @@ class NeuralCore:
                 break
             result.append(next_token)
             tokens.append(next_token)
+            if dialogue and (result.endswith(b'\nTu:') or
+                             result.endswith(b'\nNord:')):
+                del result[result.rfind(b'\n'):]
+                break
         return result.decode('utf-8',errors='ignore').strip()
 
     def grow(self, extra: int = 16):
