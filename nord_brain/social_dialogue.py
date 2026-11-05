@@ -45,3 +45,16 @@ def social_response(act: str) -> str | None:
         'question': 'Estou por aqui e pronto para conversar. E contigo, tudo bem?',
         'acknowledge': 'Combinado. Queres continuar?',
     }.get(act)
+
+def conversational_answer(message: str, previous_reply: str = '') -> str | None:
+    words=_words(message)
+    previous=_words(previous_reply)
+    if not words or len(words)>12 or '?' in message:
+        return None
+    if not ('falar' in previous and ('sobre' in previous or 'apetece' in previous)):
+        return None
+    if words in (['sobre','tudo'],['tudo'],['qualquer','coisa'],['um','pouco','de','tudo']):
+        return 'Podemos falar de tudo um pouco! Preferes tecnologia, música ou outro assunto?'
+    if words in (['nao','sei'],['tanto','faz'],['tu','escolhe']):
+        return 'Então escolho eu: qual foi a coisa mais interessante do teu dia?'
+    return None
