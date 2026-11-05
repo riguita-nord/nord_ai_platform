@@ -23,6 +23,15 @@ DIM=2048
 # Separate training and held-out conversations; never learn from generated replies.
 TRAIN=(
  ('Como estás?', 'Tudo bem', 'answer'),
+ ('Como estás?', 'Tou bem', 'answer'),
+ ('Como estás hoje?', 'Tou bem pois', 'answer'),
+ ('E tu, como estás?', 'Tou bem obrigado', 'answer'),
+ ('Como te sentes?', 'Tô bem', 'answer'),
+ ('Está tudo bem contigo?', 'Ta tudo fixe', 'answer'),
+ ('Como vai isso?', 'Tá tudo bem', 'answer'),
+ ('Olá!', 'Tou bem?', 'question'),
+ ('Boas!', 'Tudo fixe?', 'question'),
+ ('A tarefa ficou concluída.', 'Tá bem', 'acknowledge'),
  ('Como te sentes?', 'Estou bem', 'answer'),
  ('E tu, como estás?', 'Bem, obrigado', 'answer'),
  ('Está tudo bem contigo?', 'Tudo bem', 'answer'),
