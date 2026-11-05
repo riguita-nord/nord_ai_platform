@@ -12,6 +12,7 @@ from pathlib import Path
 from .conversation_corpus import TRAINING as NATURAL_TRAIN, HOLDOUT as NATURAL_HOLDOUT
 from .dialogue_training import curriculum as contextual_curriculum
 from .portuguese_training import curriculum as portuguese_curriculum
+from .dialogue_format import training_prompt
 
 
 # Exemplos humanos originais: linguagem quotidiana, composicionalidade,
@@ -81,6 +82,27 @@ HOLDOUT = (
 )
 
 
+DIALOGUE_TRAIN = (
+    ([('user','Olá'),('assistant','Olá! Como estás?'),('user','Tou bem e tu?')],
+     'Ainda bem! Estou por aqui e pronto para conversar.'),
+    ([('user','Oi'),('assistant','Olá! Como estás?'),('user','Tou bem pois')],
+     'Ainda bem! Sobre o que gostavas de conversar?'),
+    ([('user','Olá'),('assistant','Sobre o que te apetece falar?'),('user','Sobre tudo')],
+     'Podemos falar de tudo um pouco. Preferes escolher um tema?'),
+    ([('user','Quero conversar'),('assistant','Preferes tecnologia, música ou outro assunto?'),('user','Outro assunto, mas que sugeres tu?')],
+     'Sugiro viagens! Se pudesses visitar qualquer país, qual escolherias?'),
+    ([('user','Quero conversar'),('assistant','Preferes tecnologia ou música?'),('user','Escolhe tu')],
+     'Podemos falar de viagens. Qual é o teu destino de sonho?'),
+    ([('user','Quero aprender'),('assistant','Podemos falar de ciência ou história.'),('user','Prefiro história')],
+     'Boa escolha! Queres explorar a história de Portugal ou de outro país?'),
+)
+DIALOGUE_HOLDOUT = (
+    ([('user','Boas'),('assistant','Como estás hoje?'),('user','Estou bem, e contigo?')],
+     'Ainda bem! Estou pronto para conversar.'),
+    ([('user','Vamos conversar'),('assistant','Preferes música ou cinema?'),('user','Outro tema, sugere tu')],
+     'Podemos falar de viagens. Que lugar gostavas de conhecer?'),
+)
+
 def _checks(brain):
     from .conversation_corpus import HOLDOUT as natural
     from .dialogue_training import curriculum as contextual
@@ -92,7 +114,8 @@ def _checks(brain):
         "ORDER BY id DESC LIMIT 4"
     ).fetchall()
     older = brain.memory.tests(4)
-    groups = (HOLDOUT, natural[:5], context, general, teacher, older)
+    dialogue = tuple((training_prompt(turns, brain.core.model.config.context), answer) for turns, answer in DIALOGUE_HOLDOUT)
+    groups = (HOLDOUT, natural[:5], context, general, teacher, older, dialogue)
     return tuple(tuple((q, a) for q, a in group if
                        not brain.memory.lesson_was_trained(q))
                  for group in groups)
@@ -154,7 +177,8 @@ def train(brain, updates=12, *, path=None, rate=.00006):
         before = _scores(brain, groups)
         general_train, _ = portuguese_curriculum()
         contextual_train, _ = contextual_curriculum()
-        pools = (TRAIN, TRAIN, NATURAL_TRAIN, TRAIN,
+        dialogue_train = tuple((training_prompt(turns, brain.core.model.config.context), answer) for turns, answer in DIALOGUE_TRAIN)
+        pools = (TRAIN, dialogue_train, NATURAL_TRAIN, dialogue_train,
                  contextual_train, TRAIN, general_train)
         cursor = int(brain.memory.get_meta('language_curriculum_cursor', '0'))
         start_steps = brain.core.steps
@@ -181,7 +205,7 @@ def train(brain, updates=12, *, path=None, rate=.00006):
             after = _scores(brain, groups)
             # Pequenas oscilações são toleradas, mas não regredir
             # significativamente em português, diálogo ou lições do professor.
-            ceilings = (.05, .08, .10, .10, .05, .10)
+            ceilings = (.05, .08, .10, .10, .05, .10, .10)
             accepted = trained > 0 and all(
                 current is None or (math.isfinite(current) and
                     (previous is None or current <= previous + margin))
