@@ -188,6 +188,35 @@ class NeuralCore:
             self.model = NordTransformer(config or TransformerConfig())
             self.optimizer = self._optimizer()
 
+    def expand_depth(self, target_layers: int = 8) -> bool:
+        """CPU-friendly depth expansion without destroying existing learned blocks.
+
+        New residual blocks start as exact identity maps. Adam moments for
+        unchanged tensors are retained; new parameters get fresh moments.
+        """
+        current = self.model.config.layers
+        if target_layers <= current:
+            return False
+        if target_layers > 12:
+            raise ValueError('Máximo de 12 camadas')
+        old_optimizer = self.optimizer
+        old_params = list(self.model.parameters())
+        old_state = {p: state for p, state in old_optimizer.state.items()}
+        config = self.model.config
+        for _ in range(target_layers - current):
+            block = TransformerBlock(config)
+            with torch.no_grad():
+                block.attn.o_proj.weight.zero_()
+                block.mlp.down_proj.weight.zero_()
+            self.model.blocks.append(block)
+        config.layers = target_layers
+        self.optimizer = self._optimizer()
+        # Preserve AdamW moments for the original parameters by identity.
+        for parameter in old_params:
+            if parameter in old_state:
+                self.optimizer.state[parameter] = old_state[parameter]
+        return True
+
     def _optimizer(self):
         return torch.optim.AdamW(self.model.parameters(), lr=3e-4, weight_decay=0.01)
 
@@ -223,8 +252,7 @@ class NeuralCore:
     @staticmethod
     def _example(prompt: str, answer: str, context: int):
         # Only target the answer's tokens, not the question text.
-        prefix = ((prompt + '\nNord: ') if dialogue else
-                  ('Pergunta: ' + prompt + '\nResposta: ')).encode('utf-8')
+        prefix = ('Pergunta: ' + prompt + '\nResposta: ').encode('utf-8')
         suffix = answer.encode('utf-8')
         if len(prefix) + len(suffix) + 2 > context:
             raise ValueError(f'Exemplo demasiado longo para contexto de {context} tokens')
