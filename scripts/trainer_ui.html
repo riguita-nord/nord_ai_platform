@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nord AI Trainer</title><style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#0c1018;color:#edf2fc}
+*{box-sizing:border-box}body{margin:0}.shell{max-width:1080px;margin:auto;padding:32px 20px}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:30px}
+h1{font-size:26px;margin:0}h2{font-size:17px;margin:0 0 18px}p,.muted{color:#9aaac1}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.card{background:#151c29;border:1px solid #2a3548;border-radius:18px;padding:22px}
+.full{grid-column:1/-1}label{display:block;color:#bac8dc;font-size:13px;margin:14px 0 7px}
+input,select{background:#0d1420;border:1px solid #34425a;border-radius:10px;padding:12px;color:#fff;width:100%}
+button{border:0;background:#5879ec;color:white;border-radius:11px;padding:12px 17px;font-weight:650;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}.secondary{background:#303b4f}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+.stat{font-size:26px;font-weight:700}.pill{background:#26344a;border-radius:20px;padding:8px 12px;font-size:12px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0b1019;border:1px solid #273247;border-radius:12px;padding:16px;max-height:440px;overflow:auto;line-height:1.5;font-size:12px}
+.notice{margin-top:12px;min-height:22px;color:#b6c9fa}small{color:#9aaac1}
+@media(max-width:700px){.grid{grid-template-columns:1fr}.full{grid-column:auto}}
+</style></head><body><main class="shell">
+<header><div><h1>◈ Nord AI Trainer</h1><p>Treino neuronal local · CPU · 8 camadas</p></div><span class="pill" id="status">A ligar…</span></header>
+<div class="grid">
+<section class="card"><h2>Autenticação</h2><label for="token">Token de acesso (mostrado no terminal)</label>
+<input id="token" type="password" autocomplete="off" placeholder="Introduz o token"><p><small>O token fica apenas nesta página, em memória. Não é guardado no navegador.</small></p></section>
+<section class="card"><h2>Dataset</h2><div class="stat" id="bytes">—</div><p>Texto disponível para treino</p><small>Origem: training/dataset/train.txt · mínimo 1 MB</small></section>
+<section class="card"><h2>Nova sessão</h2>
+<label for="mode">Tipo de treino</label><select id="mode"><option value=".75">Misto · 75% texto / 25% diálogo</option><option value=".95">Linguagem · 95% texto</option><option value=".1">Conversação · 90% diálogo</option></select>
+<label for="steps">Atualizações neuronais</label><input id="steps" type="number" min="1" max="100000" value="1000">
+<label><input id="reset" type="checkbox" style="width:auto"> Reiniciar pesos linguísticos (cria cópia de segurança)</label>
+<div class="actions"><button id="start">Iniciar treino</button><button id="stop" class="secondary">Parar treino</button></div>
+<div id="message" class="notice" role="status"></div></section>
+<section class="card"><h2>Como funciona</h2><p>O Transformer aprende a prever o próximo token em textos autorizados e recebe treino supervisionado com diálogos.</p><p>O processo guarda um checkpoint a cada 50 atualizações. Se interromperes, podes continuar sem selecionar a opção de reinício.</p><p><small>A perda de treino não garante fluência. Verifica as respostas PREVIEW e os testes com perguntas inéditas.</small></p></section>
+<section class="card full"><h2>Consola de treino</h2><pre id="log">À espera de autenticação…</pre></section>
+</div></main><script>
+const $=id=>document.getElementById(id);
+async function request(path,method="GET",body){
+ const r=await fetch(path,{method,headers:{"X-Nord-Token":$("token").value,"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined,cache:"no-store"});
+ const result=await r.json();if(!r.ok)throw Error(result.error||"Erro no servidor");return result;
+}
+async function refresh(){
+ if(!$("token").value){$("status").textContent="Token necessário";return}
+ try{const d=await request("/api/status");$("status").textContent=d.running?"Treino em curso":"Em espera";
+ $("bytes").textContent=(d.dataset_bytes/1000000).toFixed(2)+" MB";
+ $("log").textContent=d.log||"Sem registos de treino";
+ $("start").disabled=d.running;$("stop").disabled=!d.running;
+ }catch(e){$("status").textContent="Sem acesso";$("message").textContent=e.message}
+}
+$("start").onclick=async()=>{try{
+ const steps=Number($("steps").value);
+ if(!Number.isInteger(steps)||steps<1||steps>100000)throw Error("Número de atualizações inválido");
+ if($("reset").checked&&!confirm("Criar novo checkpoint linguístico? O anterior será guardado numa cópia de segurança."))return;
+ await request("/api/start","POST",{steps,text_ratio:Number($("mode").value),reset:$("reset").checked});
+ $("message").textContent="Sessão iniciada";$("reset").checked=false;await refresh();
+ }catch(e){$("message").textContent=e.message}};
+$("stop").onclick=async()=>{try{await request("/api/stop","POST",{});$("message").textContent="Paragem solicitada";await refresh()}catch(e){$("message").textContent=e.message}};
+$("token").addEventListener("change",refresh);
+setInterval(refresh,4000);
+</script></body></html>
