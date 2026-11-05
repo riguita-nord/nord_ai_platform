@@ -210,6 +210,14 @@ def train(brain, updates=12, *, path=None, rate=.00006):
                 current is None or (math.isfinite(current) and
                     (previous is None or current <= previous + margin))
                 for previous, current, margin in zip(before, after, ceilings))
+            labels = ('linguagem', 'conversa natural', 'contexto', 'português',
+                      'lições do professor', 'testes anteriores', 'diálogo multi-turno')
+            regressions = [
+                f'{label}: {old:.4f} -> {new:.4f} (limite +{margin:.2f})'
+                for label, old, new, margin in zip(labels, before, after, ceilings)
+                if new is not None and (not math.isfinite(new) or
+                    (old is not None and new > old + margin))
+            ]
             if accepted:
                 brain.core.save()
                 brain.memory.set_meta('language_curriculum_cursor', str(cursor + updates))
@@ -222,6 +230,7 @@ def train(brain, updates=12, *, path=None, rate=.00006):
                     'Regressão nas métricas reservadas; checkpoint restaurado')
             return {
                 'accepted': accepted,
+                'regressions': regressions,
                 'examples': trained,
                 'steps': brain.core.steps - start_steps if accepted else 0,
                 'before': round(before[0], 4),
@@ -243,4 +252,6 @@ def describe(result):
     return (f"{status} Exemplos usados: {result['examples']}; "
             f"passos neuronais: {result['steps']}. "
             f"Perda linguística reservada: {result['before']} → {result['after']}. "
+            ('Avaliações que impediram o treino: ' + '; '.join(result['regressions']) + '. '
+             if result.get('regressions') else '') +
             'A fluência precisa de ser testada em conversas inéditas.')
