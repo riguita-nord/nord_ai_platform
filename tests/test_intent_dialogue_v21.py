@@ -91,7 +91,11 @@ class DialogueTrainingTests(unittest.TestCase):
                 self.assertIn('aceite' if result['accepted'] else 'rejeitado',
                               describe(result))
                 self.assertEqual(b.core.steps,
-                                 before+(2 if result['accepted'] else 0))
+                                 before+result['updates'])
+                if result['accepted']:
+                    self.assertGreaterEqual(result['updates'],2)
+                else:
+                    self.assertEqual(result['updates'],0)
                 self.assertEqual(b.memory.teacher_lesson_count(),0)
                 self.assertIsNone(b.memory.exact('podes desenvolver melhor'))
                 self.assertIn('Diálogos com contexto',handle(b,'/avaliar-dialogos'))

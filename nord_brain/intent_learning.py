@@ -268,8 +268,20 @@ class NeuralIntent:
             self.head.load_state_dict(_CACHE[0])
             self.validation_accuracy=_CACHE[1]
             self.head.eval()
+            self._save_checkpoint()
             return
         self.train_bootstrap()
+
+    def _save_checkpoint(self):
+        fd,temp=tempfile.mkstemp(prefix='.intent-',suffix='.pt',dir=self.path.parent)
+        try:
+            with os.fdopen(fd,'wb') as stream:
+                torch.save({'signature':_signature(),'weights':self.head.state_dict(),
+                            'heldout_accuracy':self.validation_accuracy},stream)
+                stream.flush();os.fsync(stream.fileno())
+            os.replace(temp,self.path)
+        finally:
+            if os.path.exists(temp):os.unlink(temp)
 
     def train_bootstrap(self):
         """One-time supervised fitting; never learns from arbitrary user turns."""
@@ -299,15 +311,7 @@ class NeuralIntent:
         global _CACHE
         _CACHE=({k:v.detach().clone() for k,v in self.head.state_dict().items()},
                 self.validation_accuracy)
-        fd,temp=tempfile.mkstemp(prefix='.intent-',suffix='.pt',dir=self.path.parent)
-        try:
-            with os.fdopen(fd,'wb') as stream:
-                torch.save({'signature':_signature(),'weights':self.head.state_dict(),
-                            'heldout_accuracy':self.validation_accuracy},stream)
-                stream.flush();os.fsync(stream.fileno())
-            os.replace(temp,self.path)
-        finally:
-            if os.path.exists(temp):os.unlink(temp)
+        self._save_checkpoint()
 
     @torch.inference_mode()
     def predict(self,text: str,focus: str='dialogue') -> tuple[str | None,float]:
