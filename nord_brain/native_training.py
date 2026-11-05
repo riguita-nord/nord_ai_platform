@@ -50,14 +50,24 @@ def train_approved_file(brain, path: str | Path, *, updates: int=6) -> CorpusRes
             "ORDER BY id DESC LIMIT 4"
         ).fetchall()
         probes=brain.memory.tests(4)
+        from .portuguese_training import curriculum as portuguese_curriculum
+        from .dialogue_training import curriculum as conversation_curriculum
+        portuguese=[row for row in portuguese_curriculum()[1][:6]
+                    if not brain.memory.lesson_was_trained(row[0])]
+        conversations=[row for row in conversation_curriculum()[1][::10][:6]
+                       if not brain.memory.lesson_was_trained(row[0])]
         before_teacher=brain.core.score(teacher) if teacher else None
         before_probes=brain.core.score(probes) if probes else None
+        before_portuguese=brain.core.score(portuguese) if portuguese else None
+        before_conversations=brain.core.score(conversations) if conversations else None
         old_steps=brain.core.steps
         brain.core.save()
         try:
             loss=brain.core.train_text(text,updates=updates)
             after_teacher=brain.core.score(teacher) if teacher else None
             after_probes=brain.core.score(probes) if probes else None
+            after_portuguese=brain.core.score(portuguese) if portuguese else None
+            after_conversations=brain.core.score(conversations) if conversations else None
             accepted=math.isfinite(loss)
             if before_teacher is not None:
                 accepted=accepted and math.isfinite(after_teacher) and (
@@ -65,6 +75,14 @@ def train_approved_file(brain, path: str | Path, *, updates: int=6) -> CorpusRes
             if before_probes is not None:
                 accepted=accepted and math.isfinite(after_probes) and (
                     after_probes <= before_probes*1.12+0.01)
+            # A corpus may improve its own next-byte loss while damaging
+            # general Portuguese. Reject that kind of interference.
+            if before_portuguese is not None:
+                accepted=accepted and math.isfinite(after_portuguese) and (
+                    after_portuguese <= before_portuguese+0.12)
+            if before_conversations is not None:
+                accepted=accepted and math.isfinite(after_conversations) and (
+                    after_conversations <= before_conversations+0.12)
             if accepted:
                 brain.core.save()
                 reason='Treino aceite; pesos e otimizador guardados'

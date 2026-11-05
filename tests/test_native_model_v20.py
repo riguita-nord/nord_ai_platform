@@ -107,4 +107,28 @@ class CorpusTrainingTests(unittest.TestCase):
             finally:b.close()
 
 
+    def test_text_training_rolls_back_if_portuguese_gets_worse(self):
+        with tempfile.TemporaryDirectory() as root,patch.dict(
+                'os.environ',{'NORD_LANGUAGE_BACKEND':'native'}):
+            b=Brain(Path(root),start_autonomy=False)
+            b.core=NeuralCore(Path(root)/'brain-v2.pt',CONFIG)
+            file=Path(root)/'dialogos.txt'
+            file.write_text(
+                ('A personagem conversou em português com a pessoa '
+                 'que conhecia os caminhos da floresta.\n')*6,
+                encoding='utf-8')
+            try:
+                old_steps=b.core.steps
+                # Two baseline scores, two post-training scores. Force a
+                # regression on held-out Portuguese to verify rollback.
+                with patch.object(b.core,'score',
+                                  side_effect=[5.0,5.0,5.45,5.0]):
+                    result=train_approved_file(b,file,updates=1)
+                self.assertFalse(result.accepted)
+                self.assertEqual(result.updates,0)
+                self.assertEqual(b.core.steps,old_steps)
+                self.assertEqual(NeuralCore(Path(root)/'brain-v2.pt').steps,old_steps)
+            finally:b.close()
+
+
 if __name__=='__main__':unittest.main()
