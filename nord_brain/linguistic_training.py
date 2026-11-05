@@ -206,7 +206,7 @@ def train(brain, updates=12, *, path=None, rate=.00006):
             labels = ('linguagem', 'conversa natural', 'contexto', 'português',
                       'lições do professor', 'testes anteriores', 'diálogo multi-turno',
                       'interpretação contextual inédita')
-            for multiplier in (1.0, .25, .0625):
+            for multiplier in (1.0, .25, .0625, .015625, .00390625):
                 attempts += 1
                 brain.core.load()
                 trained = 0
