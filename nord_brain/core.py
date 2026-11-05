@@ -233,6 +233,16 @@ class NeuralCore:
 
     def save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        # Refuse silent architectural downgrades, including stale processes
+        # attempting to overwrite a newer expanded checkpoint.
+        if self.path.exists():
+            existing = torch.load(self.path, map_location='cpu', weights_only=True)
+            disk_layers = int(existing['config']['layers'])
+            if disk_layers > self.model.config.layers:
+                raise RuntimeError(
+                    f'Checkpoint protegido: disco={disk_layers} camadas, '
+                    f'processo={self.model.config.layers}. '
+                    'Fecha instâncias antigas; não é permitido reduzir camadas.')
         fd, temp = tempfile.mkstemp(prefix='.nord-transformer-', suffix='.pt', dir=self.path.parent)
         try:
             with os.fdopen(fd, 'wb') as handle:
