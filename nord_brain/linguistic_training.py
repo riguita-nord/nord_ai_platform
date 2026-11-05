@@ -180,6 +180,9 @@ def train(brain, updates=12, *, path=None, rate=.00006):
         dialogue_train = tuple((training_prompt(turns, brain.core.model.config.context), answer) for turns, answer in DIALOGUE_TRAIN)
         pools = (TRAIN, dialogue_train, NATURAL_TRAIN, dialogue_train,
                  contextual_train, TRAIN, general_train)
+        teacher_replay = tuple(brain.memory.db.execute(
+            "SELECT question,answer FROM lessons WHERE origin='teacher' "
+            "ORDER BY id DESC LIMIT 64").fetchall())
         cursor = int(brain.memory.get_meta('language_curriculum_cursor', '0'))
         start_steps = brain.core.steps
         brain.core.save()
@@ -192,7 +195,8 @@ def train(brain, updates=12, *, path=None, rate=.00006):
                     last_loss = brain.core.train_text(corpus, updates=1, rate=rate * .65)
                     trained += 1
                     continue
-                pool = pools[index % len(pools)]
+                pool = (teacher_replay if teacher_replay and index % 4 == 1
+                        else pools[index % len(pools)])
                 # Salta por exemplos diferentes entre sessões sem usar testes.
                 row = pool[((index * 19) // 7 + index // 3) % len(pool)]
                 question, answer = row
