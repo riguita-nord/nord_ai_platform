@@ -1,3 +1,23 @@
+## Treino de conversa natural PT-PT (novembro de 2026)
+
+O comando `/treinar-dialogos 12` intercala agora exemplos de diálogo contextual, 
+português geral e conversas quotidianas originais em português europeu. 
+A avaliação `/avaliar-dialogos` apresenta separadamente perda contextual 
+(60 frases reservadas), perda de conversa natural (10 frases reservadas) e perda 
+de português geral (18 perguntas reservadas). São métricas de previsão de bytes, 
+não uma garantia de fluência.
+
+O vocabulário é representado em UTF-8 (258 IDs, com bytes e marcadores): 
+qualquer palavra pode ser codificada, mas isso **não** significa que o modelo 
+conheça o seu significado ou a consiga usar corretamente. A janela de contexto 
+do checkpoint inicial continua pequena (256 bytes/tokens), e os pesos existentes 
+não são substituídos nem reiniciados.
+
+Para conversar naturalmente, é necessário ampliar o corpus português humano 
+aprovado, o contexto e a capacidade do modelo, e treinar durante muito mais 
+tempo com validação independente. Respostas factuais desconhecidas continuam 
+a exigir verificação em vez de invenção.
+
 # Nord Brain V2.1 — intenções neuronais e português em diálogo
 
 A Nord Brain ganhou uma **cabeça neuronal supervisionada de intenções**,
