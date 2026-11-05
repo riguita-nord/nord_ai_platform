@@ -104,7 +104,8 @@ class NativeLanguage:
             return None
         history=(self.context_provider(prompt) if remember and
                  self.context_provider else [])
-        question=_compact_prompt(prompt,history)
+        from .dialogue_format import prompt_from_history
+        question=prompt_from_history(prompt,history,core.model.config.context) if history else prompt
         budget=min(125,max(42,int(max_tokens)),max(42,core.model.config.context//2))
         temperature=.82 if creative else .61
         candidate=core.generate(question,max_bytes=budget,temperature=temperature)
