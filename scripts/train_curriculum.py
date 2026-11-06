@@ -79,13 +79,18 @@ def complete(model, tok, prompt, max_tokens=32):
 
 
 def evaluate_words(model, tok, words):
-    # Check exact reconstruction from BOS, not whether a word exists in tokenizer vocabulary.
-    # Report a small reproducible probe; avoid claiming a complete vocabulary census.
-    results = []
-    for word in words[:20]:
-        predicted = complete(model, tok, "", max_tokens=min(32, len(tok.encode(word)) + 3))
-        results.append({"target": word, "generated": predicted, "exact": predicted.lower() == word})
-    return results
+    # Score each corpus word under the neural model, not merely the tokenizer.
+    # This is a ranking of learned word likelihood, not proof of semantic knowledge.
+    model.eval()
+    ranked = []
+    with torch.inference_mode():
+        for word in words[:250]:
+            seq = tok.encode(word, bos=True, eos=True)
+            loss = step_loss(model, seq)
+            if loss is not None:
+                ranked.append({"word": word, "mean_token_loss": round(float(loss), 4)})
+    ranked.sort(key=lambda p: p["mean_token_loss"])
+    return ranked[:30]
 
 
 def evaluate_sentences(model, tok):
@@ -105,11 +110,11 @@ def evaluate_math(model, tok):
 
 def report(model, tok, words, stage):
     if stage == "words":
-        probes = evaluate_words(model, tok, words)
-        print("VOCABULÁRIO — palavras testadas (não é uma lista de palavras memorizadas):", flush=True)
-        for p in probes:
+        ranked = evaluate_words(model, tok, words)
+        print("VOCABULÁRIO — 30 palavras com maior probabilidade no modelo (entre 250 candidatas):", flush=True)
+        print("Isto mede probabilidade, não compreensão do significado.", flush=True)
+        for p in ranked:
             print(json.dumps(p, ensure_ascii=False), flush=True)
-        print(f"Reconstrução exata: {sum(p['exact'] for p in probes)}/{len(probes)}", flush=True)
     elif stage == "sentences":
         print("FRASES — exemplos gerados:", flush=True)
         for p in evaluate_sentences(model, tok):
