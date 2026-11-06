@@ -236,7 +236,7 @@ def main():
         if step % 100 == 0:
             print(json.dumps({"step": step, "loss": round(float(loss.detach()), 4)}), flush=True)
         if step % args.eval_every == 0 or i == args.steps - 1:
-            results = run_evaluation(model, tok, args.eval_size)
+            results = run_evaluation(model, tok, args.eval_size, args.stage)
             print("AVALIAÇÃO V7:", json.dumps({"step": step, "results": results,
                   "stage_2_unlocked": False}, ensure_ascii=False), flush=True)
             score = results["validation_dynamic"]["accuracy_pct"]
