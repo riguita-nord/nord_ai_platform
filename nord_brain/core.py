@@ -321,6 +321,32 @@ class NeuralCore:
             windows.append((tokens,labels))
         return windows
 
+    def train_text_span(self, text: str, *, rate: float = .0002) -> float:
+        """One optimizer update over every next-byte target in a sampled span."""
+        if not 0 < rate <= .001:
+            raise ValueError("Taxa de aprendizagem inválida")
+        data = text.encode("utf-8")
+        if not 2 <= len(data) <= self.model.config.context - 1:
+            raise ValueError("Janela textual fora dos limites")
+        ids = torch.tensor([BOS] + list(data[:-1]), dtype=torch.long).unsqueeze(0)
+        labels = torch.tensor(list(data), dtype=torch.long).unsqueeze(0)
+        self.model.train()
+        for group in self.optimizer.param_groups:
+            group["lr"] = rate
+        try:
+            self.optimizer.zero_grad(set_to_none=True)
+            logits = self.model(ids)
+            loss = F.cross_entropy(logits.reshape(-1, VOCAB_SIZE), labels.reshape(-1))
+            if not torch.isfinite(loss):
+                raise FloatingPointError("Perda textual não finita")
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+            self.optimizer.step()
+            self.steps += 1
+            return float(loss.detach())
+        finally:
+            self.model.eval()
+
     def train_text(self, text: str, *, updates: int=6, rate: float=.00012) -> float:
         """Update own Transformer weights from explicitly approved Portuguese.
 
