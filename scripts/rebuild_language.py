@@ -9,6 +9,7 @@ import argparse
 import json
 import math
 import os
+import random
 from pathlib import Path
 import shutil
 import sys
@@ -34,6 +35,7 @@ def parse():
     parser.add_argument("--save-every", type=int, default=50)
     parser.add_argument("--text-ratio", type=float, default=0.75,
                         help="Fraction of updates for next-token text pretraining (0.1-0.95)")
+    parser.add_argument("--seed", type=int, default=1729, help="Reproducible sampling seed")
     parser.add_argument("--preview", action="store_true",
                         help="Print raw unseen generations after training")
     return parser.parse_args()
@@ -87,6 +89,11 @@ def main():
         else:
             core = NeuralCore(checkpoint)
             print(f"Resuming language checkpoint at step {core.steps}", flush=True)
+        # Preserve the exact previous checkpoint before changing any weights.
+        if checkpoint.exists() and args.steps > 0:
+            archive = root / ("language-v1.pretrain-" + time.strftime("%Y%m%d-%H%M%S") + ".pt")
+            shutil.copy2(checkpoint, archive)
+            print(f"Pre-training checkpoint backup: {archive}", flush=True)
         # No train/evaluation leakage: curated HOLDOUT is never sampled.
         examples = tuple(TRAIN) + tuple(NATURAL_TRAIN) + tuple(
             (training_prompt(turns, core.model.config.context), answer)
@@ -95,30 +102,52 @@ def main():
             raise SystemExit("No dialogue examples")
         initial = core.score(HOLDOUT)
         print(f"Holdout loss before: {initial:.4f}", flush=True)
+        # A shuffled cycle guarantees that each curated dialogue is visited
+        # once before any is repeated. Seeded RNG allows reproducible runs.
+        rng = random.Random(args.seed + core.steps)
+        dialogue_order = list(range(len(examples)))
+        rng.shuffle(dialogue_order)
+        dialogue_pos = 0
+        text_updates = dialogue_updates = 0
+        text_loss_total = dialogue_loss_total = 0.0
         for i in range(args.steps):
-            step = core.steps
-            if (i % 100) < round(args.text_ratio * 100):
-                # Sample a different region of the full corpus every update.
-                size = min(1400, len(corpus))
-                start = (step * 7919) % max(1, len(corpus) - size + 1)
+            # Balanced scheduling across each 100-update block.
+            text_step = ((i * round(args.text_ratio * 100)) % 100) < round(args.text_ratio * 100)
+            if text_step:
+                # Train a full context-sized window, not one tiny slice of
+                # a 1400-character region selected by the old fixed stride.
+                size = min(core.model.config.context - 2, len(corpus))
+                start = rng.randrange(max(1, len(corpus) - size + 1))
                 segment = corpus[start:start + size]
                 loss = core.train_text(segment, updates=1, rate=args.rate)
+                text_updates += 1
+                text_loss_total += loss
             else:
-                question, answer = examples[(step * 37 + step // 11) % len(examples)]
+                if dialogue_pos >= len(dialogue_order):
+                    rng.shuffle(dialogue_order)
+                    dialogue_pos = 0
+                question, answer = examples[dialogue_order[dialogue_pos]]
+                dialogue_pos += 1
                 q = question if question.startswith("Tu: ") else "Tu: " + question
                 loss = core.train(q, answer, epochs=1, rate=args.rate, dialogue=True)
+                dialogue_updates += 1
+                dialogue_loss_total += loss
             if not math.isfinite(loss):
                 raise RuntimeError("Non-finite training loss")
             if (i + 1) % args.save_every == 0 or i + 1 == args.steps:
                 core.save()
                 score = core.score(HOLDOUT)
                 print(json.dumps({"step": core.steps, "train_loss": round(loss, 4),
-                                  "holdout_loss": round(score, 4)}, ensure_ascii=False), flush=True)
+                                  "holdout_loss": round(score, 4),
+                                  "text_updates": text_updates, "dialogue_updates": dialogue_updates,
+                                  "mean_text_loss": round(text_loss_total / text_updates, 4) if text_updates else None,
+                                  "mean_dialogue_loss": round(dialogue_loss_total / dialogue_updates, 4) if dialogue_updates else None}, ensure_ascii=False), flush=True)
         if args.preview:
             for prompt in ("Tu: Olá", "Tu: Como estás hoje?",
                            "Tu: Podemos conversar sobre uma ideia nova?"):
-                answer = core.generate(prompt, max_bytes=140, temperature=0, dialogue=True)
-                print(f"PREVIEW {prompt!r}: {answer!r}", flush=True)
+                for temp in (0, 0.7):
+                    answer = core.generate(prompt, max_bytes=140, temperature=temp, dialogue=True)
+                    print(f"PREVIEW temperature={temp} {prompt!r}: {answer!r}", flush=True)
         print("Training finished. Test actual unseen conversations before treating the model as ready.", flush=True)
 
 
