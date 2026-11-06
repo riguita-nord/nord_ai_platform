@@ -170,6 +170,7 @@ def main():
     ap.add_argument("--diagnose-every", type=int, default=50)
     ap.add_argument("--eval-only", action="store_true")
     ap.add_argument("--final-test", action="store_true", help="Executa teste reservado uma única vez, sem treinar")
+    ap.add_argument("--foundation", type=Path, help="Checkpoint pré-treinado PT-PT, usado só ao iniciar experiência nova")
     ap.add_argument("--fresh", action="store_true", help="Inicia experiência nova num diretório vazio")
     ap.add_argument("--data-dir", type=Path, default=Path.home()/".nord-brain"/"five-words-loop")
     args = ap.parse_args()
@@ -192,7 +193,16 @@ def main():
     check_dataset(train, validation, final_test)
     groups = weighted_training_groups()
     text = "\n".join(prompt(q) + a for q, a in train)
-    tok = Tokenizer.fit(text, limit=512)
+    foundation = None
+    if args.foundation:
+        if not args.foundation.is_file():
+            ap.error("Checkpoint foundation inexistente")
+        foundation = torch.load(args.foundation, map_location="cpu", weights_only=True)
+        if foundation.get("experiment") != "foundation-ptpt-v1" or foundation.get("config") != CONFIG:
+            ap.error("Foundation incompatível")
+        tok = Tokenizer(foundation["tokenizer"]["words"])
+    else:
+        tok = Tokenizer.fit(text, limit=512)
     model = Model(len(tok.vocab), **CONFIG)
     opt = torch.optim.AdamW(model.parameters(), lr=args.rate)
     args.data_dir.mkdir(parents=True, exist_ok=True)
@@ -201,8 +211,17 @@ def main():
     if args.fresh and (path.exists() or best_path.exists()):
         ap.error("--fresh exige --data-dir novo e vazio; não apaga checkpoints")
     cycle, best, stalled = 0, -1.0, 0
+    if not path.exists() and foundation is not None and not (args.eval_only or args.final_test):
+        model.load_state_dict(foundation["model"])
+        print("FOUNDATION:", json.dumps({"passos_pre_treino":foundation["step"],
+              "loss_validacao":foundation.get("validation_loss"),
+              "modo":"fine-tuning cinco palavras"}, ensure_ascii=False), flush=True)
     if path.exists():
         state = torch.load(path, map_location="cpu", weights_only=True)
+        if not args.foundation:
+            tok = Tokenizer(state["tokenizer"]["words"])
+            model = Model(len(tok.vocab), **CONFIG)
+            opt = torch.optim.AdamW(model.parameters(), lr=args.rate)
         if state.get("experiment") != "five-words-loop-v2" or state["tokenizer"] != tok.to_dict():
             ap.error("Checkpoint incompatível")
         model.load_state_dict(state["model"])
