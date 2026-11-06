@@ -135,7 +135,7 @@ def evaluate_math(model, tok):
 
 def report(model, tok, words, stage, corpus):
     if stage == "words":
-        print_vocabulary_print_vocabulary_report(model, tok, words, corpus)
+        print_vocabulary_report(model, tok, words, corpus)
     elif stage == "sentences":
         print("FRASES — exemplos gerados:", flush=True)
         for p in evaluate_sentences(model, tok):
