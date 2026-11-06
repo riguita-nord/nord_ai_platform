@@ -189,6 +189,8 @@ def main():
     # independente de compreensão; a avaliação final fica isolada.
     validation = examples(TEMPLATES_TEST)
     final_test = conjugation_examples(True) + sentence_examples(True)
+    check_dataset(train, validation, final_test)
+    groups = weighted_training_groups()
     text = "\n".join(prompt(q) + a for q, a in train)
     tok = Tokenizer.fit(text, limit=512)
     model = Model(len(tok.vocab), **CONFIG)
