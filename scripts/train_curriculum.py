@@ -78,19 +78,36 @@ def complete(model, tok, prompt, max_tokens=32):
     return tok.decode(output).strip()
 
 
+def word_score(model, tok, word):
+    seq = tok.encode(word, bos=True, eos=True)
+    loss = step_loss(model, seq)
+    return float(loss) if loss is not None else float("inf")
+
+
+def fake_word(word):
+    # Deterministic nonword: preserve the first letter and reverse the remainder.
+    # If reversal is identical, rotate. These are synthetic negatives, not a lexicon.
+    tail = word[1:]
+    candidate = word[0] + tail[::-1]
+    if candidate == word:
+        candidate = word[1:] + word[0]
+    return candidate
+
+
 def evaluate_words(model, tok, words):
-    # Score each corpus word under the neural model, not merely the tokenizer.
-    # This is a ranking of learned word likelihood, not proof of semantic knowledge.
+    """A limited word/nonword likelihood probe, not a semantic comprehension test."""
     model.eval()
-    ranked = []
+    results = []
     with torch.inference_mode():
-        for word in words[:250]:
-            seq = tok.encode(word, bos=True, eos=True)
-            loss = step_loss(model, seq)
-            if loss is not None:
-                ranked.append({"word": word, "mean_token_loss": round(float(loss), 4)})
-    ranked.sort(key=lambda p: p["mean_token_loss"])
-    return ranked[:30]
+        for word in words[:30]:
+            nonword = fake_word(word)
+            real_loss = word_score(model, tok, word)
+            fake_loss = word_score(model, tok, nonword)
+            results.append({"word": word, "nonword": nonword,
+                            "real_loss": round(real_loss, 4),
+                            "nonword_loss": round(fake_loss, 4),
+                            "correct": real_loss < fake_loss})
+    return results
 
 
 def evaluate_sentences(model, tok):
@@ -110,11 +127,16 @@ def evaluate_math(model, tok):
 
 def report(model, tok, words, stage):
     if stage == "words":
-        ranked = evaluate_words(model, tok, words)
-        print("VOCABULÁRIO — 30 palavras com maior probabilidade no modelo (entre 250 candidatas):", flush=True)
-        print("Isto mede probabilidade, não compreensão do significado.", flush=True)
-        for p in ranked:
+        results = evaluate_words(model, tok, words)
+        print("VOCABULÁRIO — palavra real vs. palavra inventada:", flush=True)
+        print("Teste de preferência probabilística, não compreensão de significado.", flush=True)
+        for p in results:
             print(json.dumps(p, ensure_ascii=False), flush=True)
+        correct = sum(p["correct"] for p in results)
+        print(f"ACERTOS: {correct}/{len(results)} ({100 * correct / max(1, len(results)):.1f}%)", flush=True)
+        print("PALAVRAS COM RESULTADO POSITIVO:", ", ".join(p["word"] for p in results if p["correct"]), flush=True)
+        print("PALAVRAS EM QUE FALHOU:", ", ".join(p["word"] for p in results if not p["correct"]), flush=True)
+        print("AVISO: palavras frequentes podem ser tokens inteiros; a comparação é enviesada.", flush=True)
     elif stage == "sentences":
         print("FRASES — exemplos gerados:", flush=True)
         for p in evaluate_sentences(model, tok):
@@ -136,6 +158,7 @@ def main():
     ap.add_argument("--data-dir", type=Path, default=Path.home() / ".nord-brain" / "curriculum")
     ap.add_argument("--rate", type=float, default=0.0002)
     ap.add_argument("--preview", action="store_true", help="Accepted for compatibility; reports always print")
+    ap.add_argument("--eval-only", action="store_true", help="Show stage report without training")
     args = ap.parse_args()
     if not 1 <= args.steps <= 100000 or not 0 < args.rate <= .001:
         ap.error("Invalid steps or learning rate")
@@ -176,6 +199,11 @@ def main():
         completed = []
         steps = {s: 0 for s in STAGES[:-1]}
         print("Novo modelo:", sum(p.numel() for p in model.parameters()), "parâmetros", flush=True)
+    if args.eval_only:
+        if not path.exists():
+            ap.error("No checkpoint to evaluate")
+        report(model, tok, words, args.stage)
+        return
     if args.stage == "final":
         if not all(s in completed for s in STAGES[:-1]):
             ap.error("Final evaluation requires words, sentences and reasoning training first")
