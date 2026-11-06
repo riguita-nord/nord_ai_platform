@@ -62,7 +62,14 @@ def loss_for(model,seq,prefix):
     x=torch.tensor(seq[:-1],dtype=torch.long)[None]
     y=torch.tensor(seq[1:],dtype=torch.long)
     y[:prefix-1]=-100
-    return F.cross_entropy(model(x)[0],y,ignore_index=-100)
+    # Penalize premature EOS more strongly while retaining the correct final EOS.
+    logits=model(x)[0]
+    losses=F.cross_entropy(logits,y,ignore_index=-100,reduction="none")
+    valid=y!=-100
+    first=prefix-1
+    weights=torch.ones_like(losses)
+    weights[first]=2.0
+    return (losses*weights*valid).sum()/(weights*valid).sum()
 
 @torch.inference_mode()
 def generate(model,tok,prompt,max_tokens=24):
@@ -72,6 +79,9 @@ def generate(model,tok,prompt,max_tokens=24):
     for _ in range(max_tokens):
         logits=model(torch.tensor(ids[-model.context:],dtype=torch.long)[None])[0,-1].clone()
         logits[0]=logits[1]=logits[3]=-float("inf")
+        # An immediate EOS is not a valid answer for this non-empty-answer task.
+        # This only prevents an empty string; it does not supply the right answer.
+        if not output:logits[2]=-float("inf")
         nxt=int(logits.argmax())
         if nxt==2:break
         if nxt<4:break
@@ -93,6 +103,7 @@ def evaluate(model,tok,concepts,qt,ct=None):
 
 def report(model,tok,stage,verbose=False):
     scores={}
+    empty_counts={}
     for label,items,qt,ct in (
         ("memorized",BASE,Q_TRAIN[0],None),
         ("heldout_paraphrase",BASE,Q_HELD,None),
@@ -104,17 +115,19 @@ def report(model,tok,stage,verbose=False):
     ):
         value,rows=evaluate(model,tok,items,qt,ct)
         scores[label]=value
+        empty_counts[label]=sum(not r["actual"] for r in rows)
         wrong=[r for r in rows if not r["ok"]]
         print(label,":",value,"% |",len(rows)-len(wrong),"/",len(rows),
               "| erros:",json.dumps(wrong if verbose else wrong[:2],ensure_ascii=False),flush=True)
     gates={
         "spelling":scores["memorized"]>=80,
-        "lexical":scores["memorized"]>=95,
+        "lexical":scores["memorized"]>=95 and scores["heldout_paraphrase"]>=30,
         "paraphrase":scores["heldout_paraphrase"]>=85 and scores["memorized"]>=90,
         "context":scores["synthetic_context_transfer"]>=80 and scores["trained_context"]>=80,
         "expansion":scores["expanded_lexical"]>=90 and scores["heldout_paraphrase"]>=85,
     }
     print("AVALIAÇÃO V6:",json.dumps({"stage":stage,"scores":scores,
+        "empty_responses":empty_counts,
         "current_stage_gate_passed":gates[stage],"stage_2_unlocked":False,
         "meaning_mastery_verified":False},ensure_ascii=False),flush=True)
     return gates[stage]
@@ -132,7 +145,7 @@ def examples(tok,stage):
                         buckets.append(pair(tok,question(word,kind,qt),rels[idx],CONFIG["context"]))
     # Rehearsal avoids catastrophic forgetting as complexity increases.
     add(BASE,Q_TRAIN[:1])
-    if stage in ("paraphrase","context","expansion"):
+    if stage in ("lexical","paraphrase","context","expansion"):
         add(BASE,Q_TRAIN[1:])
     if stage in ("context","expansion"):
         add(BASE,Q_TRAIN,CONTEXTS)
