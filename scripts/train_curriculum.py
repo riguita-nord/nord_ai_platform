@@ -240,7 +240,7 @@ def main():
     tmp = path.with_suffix(".tmp")
     torch.save(state, tmp)
     os.replace(tmp, path)
-    report(model, tok, words, args.stage)
+    report(model, tok, words, args.stage, corpus)
     print("Checkpoint:", path, flush=True)
 
 
