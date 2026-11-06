@@ -129,17 +129,16 @@ def main():
         step = 0
         best = 999.
         print("New curriculum:", sum(p.numel() for p in model.parameters()), "parameters", flush=True)
-    config = dict(dim=model.embed.embedding_dim, heads=len(model.blocks[0].attn.in_proj_bias) // (3 * model.embed.embedding_dim) if False else model.blocks[0].attn.num_heads,
+    config = dict(dim=model.embed.embedding_dim, heads=model.blocks[0].attn.num_heads,
                   layers=len(model.blocks), context=model.context)
     if args.stage != "auto":
         selected = STAGES.index(args.stage)
-        if selected > stage_idx:
-            ap.error("Cannot skip stages; complete the earlier stages first")
-        stage_idx = selected
+        if selected != stage_idx:
+            ap.error("Use the current stage or --stage auto; manual stage changes are disabled")
     def save():
         state = dict(model=model.state_dict(), optimizer=optimizer.state_dict(),
                      tokenizer=tok.to_dict(), config=config, stage_idx=stage_idx,
-                     step=step, best=best)
+                     step=step, stage_updates=stage_updates, best=best)
         tmp = path.with_suffix(".tmp")
         torch.save(state, tmp)
         os.replace(tmp, path)
@@ -147,6 +146,7 @@ def main():
         return {stage: round(task_loss(model, tok, EVAL[stage]), 4)
                 for stage in STAGES[:stage_idx + 1]}
     print("Evaluation:", json.dumps(report(), ensure_ascii=False), flush=True)
+    stage_updates = int(state.get("stage_updates", 0)) if path.exists() else 0
     if not args.eval_only:
         # Corpus windows are sampled as contiguous tokens; preserve real language structure.
         corpus_tokens = tok.encode(corpus)
@@ -172,6 +172,7 @@ def main():
             nn.utils.clip_grad_norm_(model.parameters(), 1.)
             optimizer.step()
             step += 1
+            stage_updates += 1
             if (i + 1) % 50 == 0 or i + 1 == args.steps:
                 metrics = report()
                 score = metrics[current]
@@ -181,8 +182,9 @@ def main():
                                   "evaluation": metrics}, ensure_ascii=False), flush=True)
                 # Promotion only after a minimum of 200 updates in current stage.
                 # Thresholds are provisional and should be calibrated with better held-out tests.
-                if args.stage == "auto" and (step >= 200) and score <= THRESHOLDS[current] and stage_idx < len(STAGES)-1:
+                if args.stage == "auto" and stage_updates >= 200 and score <= THRESHOLDS[current] and stage_idx < len(STAGES)-1:
                     stage_idx += 1
+                    stage_updates = 0
                     best = 999.
                     print("Stage promoted to:", STAGES[stage_idx], flush=True)
                 save()
