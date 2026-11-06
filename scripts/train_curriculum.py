@@ -1,196 +1,215 @@
-"""Nord Brain curriculum trainer: words -> sentences -> reasoning -> prediction.
+"""Four explicit Nord Brain stages: vocabulary, sentences, reasoning, final exam.
 
-CPU-only, own Transformer, independent checkpoint. No external model/API.
-Stage promotion is based on held-out token loss, NOT on step counts alone.
+Use --stage words|sentences|reasoning|final. No automatic promotion.
+Independent checkpoint from previous curriculum prototype (curriculum-four.pt).
 """
 from __future__ import annotations
 import argparse
+from collections import Counter
 import json
 import os
 from pathlib import Path
 import random
+import re
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
 import torch
 from torch import nn
 from torch.nn import functional as F
-from train_language_v2 import Model, Tokenizer
-from train_language_v3 import sample
+from train_language_v2 import Model, Tokenizer, PATTERN
 
-STAGES = ("words", "sentences", "reasoning", "prediction")
-# Held-out tasks are fixed and never included in the training examples.
-EVAL = {
-    "words": [("mar", "mar"), ("janela", "janela"), ("caminho", "caminho"), ("árvore", "árvore")],
-    "sentences": [("Continua: A menina abriu", " a janela."), ("Continua: O cão correu", " pelo jardim."),
-                  ("Continua: A chuva caiu", " durante a noite.")],
-    "reasoning": [("Quanto é 7 + 5?", "12"), ("Quanto é 9 - 4?", "5"),
-                  ("Quanto é 3 + 8?", "11")],
-    "prediction": [("Se 3 + 4 = 7, quanto é 4 + 3?", "7"),
-                   ("Depois de segunda-feira vem", " terça-feira."),
-                   ("Se 6 - 2 = 4, quanto é 6 - 3?", "3")],
-}
-THRESHOLDS = {"words": 2.0, "sentences": 2.3, "reasoning": 1.7, "prediction": 1.7}
+STAGES = ("words", "sentences", "reasoning", "final")
+WORD_RE = re.compile(r"^[^\W\d_]{3,}$", re.UNICODE)
+# Reserved arithmetic problems use operands outside the training range.
+TEST_MATH = [(31, 12), (24, 15), (42, 16), (53, 21), (17, 27)]
 
 
-def examples(stage, corpus, rng):
-    if stage == "words":
-        # Word-in-context language modeling, not isolated vocabulary memorization.
-        lines = [s.strip() for s in corpus.splitlines() if len(s.strip()) >= 30]
-        if not lines:
-            lines = [corpus]
-        for _ in range(2000):
-            line = rng.choice(lines)
-            yield "Texto: " + line[:500] + "\n"
-    elif stage == "sentences":
-        lines = [s.strip() for s in corpus.splitlines() if len(s.strip()) >= 45]
-        if not lines:
-            lines = [corpus[i:i + 400] for i in range(0, len(corpus), 400)]
-        for _ in range(2000):
-            yield "Texto: " + rng.choice(lines)[:500] + "\n"
-    elif stage in ("reasoning", "prediction"):
-        for _ in range(2000):
-            a, b = rng.randrange(0, 20), rng.randrange(0, 20)
-            if stage == "reasoning":
-                yield f"Pergunta: Quanto é {a} + {b}?\nResposta: {a+b}\n"
-            else:
-                yield f"Pergunta: Se tenho {a} objetos e recebo {b}, quantos tenho?\nResposta: {a+b}\n"
+def vocabulary(corpus, limit=1200):
+    counts = Counter(p.lower() for p in PATTERN.findall(corpus) if WORD_RE.fullmatch(p))
+    return [w for w, n in counts.most_common() if n >= 2][:limit]
 
 
-def task_loss(model, tok, pairs):
+def batch_word(tok, words, rng):
+    # The target is a complete word; this stage never asks the model to write sentences.
+    word = rng.choice(words)
+    seq = tok.encode(word, bos=True, eos=True)
+    return seq, 0
+
+
+def batch_sentence(tok, sentences, rng):
+    line = rng.choice(sentences)
+    seq = tok.encode(line, bos=True, eos=True)
+    return seq, 0
+
+
+def batch_math(tok, rng):
+    a, b = rng.randrange(0, 20), rng.randrange(0, 20)
+    op = rng.choice(("+", "-"))
+    result = a + b if op == "+" else a - b
+    prefix = tok.encode(f"Calcula: {a} {op} {b} = ", bos=True)
+    suffix = tok.encode(str(result), eos=True)
+    return prefix + suffix, len(prefix)
+
+
+def step_loss(model, seq, prefix=0):
+    seq = seq[-model.context - 1:]
+    labels = torch.tensor(seq[1:], dtype=torch.long)
+    # Mask instruction tokens, but keep the answer targets.
+    labels[:max(0, prefix - 1)] = -100
+    if not (labels != -100).any():
+        return None
+    return F.cross_entropy(model(torch.tensor(seq[:-1], dtype=torch.long)[None])[0],
+                           labels, ignore_index=-100)
+
+
+@torch.inference_mode()
+def complete(model, tok, prompt, max_tokens=32):
     model.eval()
-    total = 0.0
-    count = 0
-    with torch.inference_mode():
-        for question, answer in pairs:
-            prefix = tok.encode("Pergunta: " + question + "\nResposta: ", bos=True)
-            suffix = tok.encode(answer, eos=True)
-            seq = (prefix + suffix)[-model.context - 1:]
-            shift = len(prefix) + len(suffix) - len(seq)
-            labels = torch.tensor(seq[1:], dtype=torch.long)
-            labels[:max(0, len(prefix) - shift - 1)] = -100
-            if not (labels != -100).any():
-                continue
-            logits = model(torch.tensor(seq[:-1], dtype=torch.long)[None])[0]
-            total += float(F.cross_entropy(logits, labels, ignore_index=-100, reduction="sum"))
-            count += int((labels != -100).sum())
-    return total / max(1, count)
+    ids = tok.encode(prompt, bos=True)
+    output = []
+    for _ in range(max_tokens):
+        logits = model(torch.tensor(ids[-model.context:], dtype=torch.long)[None])[0, -1].clone()
+        logits[0] = logits[1] = logits[3] = -float("inf")
+        nxt = int(logits.argmax())
+        if nxt == 2:
+            break
+        output.append(nxt)
+        ids.append(nxt)
+    return tok.decode(output).strip()
+
+
+def evaluate_words(model, tok, words):
+    # Check exact reconstruction from BOS, not whether a word exists in tokenizer vocabulary.
+    # Report a small reproducible probe; avoid claiming a complete vocabulary census.
+    results = []
+    for word in words[:20]:
+        predicted = complete(model, tok, "", max_tokens=min(32, len(tok.encode(word)) + 3))
+        results.append({"target": word, "generated": predicted, "exact": predicted.lower() == word})
+    return results
+
+
+def evaluate_sentences(model, tok):
+    prompts = ("A menina abriu ", "Hoje de manhã ", "O livro estava ")
+    return [{"prompt": p, "generated": complete(model, tok, p, 45)} for p in prompts]
+
+
+def evaluate_math(model, tok):
+    results = []
+    for a, b in TEST_MATH:
+        prompt = f"Calcula: {a} + {b} = "
+        generated = complete(model, tok, prompt, 10)
+        results.append({"question": prompt.strip(), "generated": generated,
+                        "expected": str(a+b), "correct": generated == str(a+b)})
+    return results
+
+
+def report(model, tok, words, stage):
+    if stage == "words":
+        probes = evaluate_words(model, tok, words)
+        print("VOCABULÁRIO — palavras testadas (não é uma lista de palavras memorizadas):", flush=True)
+        for p in probes:
+            print(json.dumps(p, ensure_ascii=False), flush=True)
+        print(f"Reconstrução exata: {sum(p['exact'] for p in probes)}/{len(probes)}", flush=True)
+    elif stage == "sentences":
+        print("FRASES — exemplos gerados:", flush=True)
+        for p in evaluate_sentences(model, tok):
+            print(json.dumps(p, ensure_ascii=False), flush=True)
+    elif stage == "reasoning":
+        print("RACIOCÍNIO — exercícios não utilizados no treino:", flush=True)
+        for p in evaluate_math(model, tok):
+            print(json.dumps(p, ensure_ascii=False), flush=True)
+    else:
+        for section in ("words", "sentences", "reasoning"):
+            report(model, tok, words, section)
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--corpus", type=Path, default=Path("training/dataset/train.txt"))
+    ap.add_argument("--stage", choices=STAGES, required=True)
     ap.add_argument("--steps", type=int, default=100)
-    ap.add_argument("--dim", type=int, default=192)
-    ap.add_argument("--heads", type=int, default=6)
-    ap.add_argument("--layers", type=int, default=6)
-    ap.add_argument("--context", type=int, default=256)
-    ap.add_argument("--vocab", type=int, default=4096)
-    ap.add_argument("--rate", type=float, default=0.0002)
-    ap.add_argument("--seed", type=int, default=1729)
-    ap.add_argument("--stage", choices=STAGES + ("auto",), default="auto")
     ap.add_argument("--data-dir", type=Path, default=Path.home() / ".nord-brain" / "curriculum")
-    ap.add_argument("--eval-only", action="store_true")
-    ap.add_argument("--preview", action="store_true")
+    ap.add_argument("--rate", type=float, default=0.0002)
+    ap.add_argument("--preview", action="store_true", help="Accepted for compatibility; reports always print")
     args = ap.parse_args()
-    if not 1 <= args.steps <= 100000 or not 128 <= args.context <= 512:
-        ap.error("Invalid steps/context")
-    if args.dim % args.heads or not 96 <= args.dim <= 384 or not 2 <= args.layers <= 10:
-        ap.error("Invalid model shape")
-    if not 512 <= args.vocab <= 8192 or not 0 < args.rate <= .001:
-        ap.error("Invalid vocabulary/learning rate")
+    if not 1 <= args.steps <= 100000 or not 0 < args.rate <= .001:
+        ap.error("Invalid steps or learning rate")
     torch.set_num_threads(max(1, min(4, int(os.getenv("NORD_THREADS", "2")))))
-    torch.manual_seed(args.seed)
-    rng = random.Random(args.seed)
+    rng = random.Random(1729)
+    torch.manual_seed(1729)
     corpus = args.corpus.read_text(encoding="utf-8")
     if len(corpus.encode("utf-8")) < 100000:
-        ap.error("At least 100 KB of licensed training text required")
+        ap.error("Corpus must be at least 100 KB")
+    words = vocabulary(corpus)
+    if len(words) < 100:
+        ap.error("Insufficient vocabulary")
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+|\n+", corpus)
+                 if 20 <= len(s.strip()) <= 300]
+    if len(sentences) < 20:
+        ap.error("Insufficient sentences")
     args.data_dir.mkdir(parents=True, exist_ok=True)
-    path = args.data_dir / "curriculum.pt"
+    path = args.data_dir / "curriculum-four.pt"
     if path.exists():
         state = torch.load(path, map_location="cpu", weights_only=True)
         tok = Tokenizer(state["tokenizer"]["words"])
         model = Model(len(tok.vocab), **state["config"])
         model.load_state_dict(state["model"])
-        optimizer = torch.optim.AdamW(model.parameters(), lr=args.rate)
-        optimizer.load_state_dict(state["optimizer"])
-        for group in optimizer.param_groups:
+        optim = torch.optim.AdamW(model.parameters(), lr=args.rate)
+        optim.load_state_dict(state["optimizer"])
+        for group in optim.param_groups:
             group["lr"] = args.rate
-        stage_idx = int(state["stage_idx"])
-        step = int(state["step"])
-        best = float(state.get("best", 999))
-        print("Resuming curriculum:", STAGES[stage_idx], "step", step, flush=True)
+        completed = list(state["completed"])
+        steps = dict(state["steps"])
+        print("A retomar treino:", json.dumps(steps), flush=True)
     else:
-        tok = Tokenizer.fit(corpus, args.vocab)
-        config = dict(dim=args.dim, heads=args.heads, layers=args.layers, context=args.context)
+        if args.stage != "words":
+            ap.error("Start with --stage words")
+        tok = Tokenizer.fit(corpus, 4096)
+        config = {"dim": 192, "heads": 6, "layers": 6, "context": 256}
         model = Model(len(tok.vocab), **config)
-        optimizer = torch.optim.AdamW(model.parameters(), lr=args.rate)
-        stage_idx = 0
-        step = 0
-        best = 999.
-        print("New curriculum:", sum(p.numel() for p in model.parameters()), "parameters", flush=True)
-    config = dict(dim=model.embed.embedding_dim, heads=model.blocks[0].attn.num_heads,
-                  layers=len(model.blocks), context=model.context)
-    if args.stage != "auto":
-        selected = STAGES.index(args.stage)
-        if selected != stage_idx:
-            ap.error("Use the current stage or --stage auto; manual stage changes are disabled")
-    def save():
-        state = dict(model=model.state_dict(), optimizer=optimizer.state_dict(),
-                     tokenizer=tok.to_dict(), config=config, stage_idx=stage_idx,
-                     step=step, stage_updates=stage_updates, best=best)
-        tmp = path.with_suffix(".tmp")
-        torch.save(state, tmp)
-        os.replace(tmp, path)
-    def report():
-        return {stage: round(task_loss(model, tok, EVAL[stage]), 4)
-                for stage in STAGES[:stage_idx + 1]}
-    print("Evaluation:", json.dumps(report(), ensure_ascii=False), flush=True)
-    stage_updates = int(state.get("stage_updates", 0)) if path.exists() else 0
-    if not args.eval_only:
-        # Corpus windows are sampled as contiguous tokens; preserve real language structure.
-        corpus_tokens = tok.encode(corpus)
-        if len(corpus_tokens) <= model.context + 1:
-            ap.error("Corpus too small for context")
-        for i in range(args.steps):
-            current = STAGES[stage_idx]
-            if current in ("words", "sentences") or i % 5 == 0:
-                start = rng.randrange(len(corpus_tokens) - model.context - 1)
-                seq = corpus_tokens[start:start + model.context + 1]
-                labels = torch.tensor(seq[1:], dtype=torch.long)
-            else:
-                text = next(examples(current, corpus, rng))
-                seq = tok.encode(text, bos=True, eos=True)[-model.context - 1:]
-                labels = torch.tensor(seq[1:], dtype=torch.long)
-            ids = torch.tensor(seq[:-1], dtype=torch.long)[None]
-            model.train()
-            optimizer.zero_grad(set_to_none=True)
-            loss = F.cross_entropy(model(ids)[0], labels)
-            if not torch.isfinite(loss):
-                raise RuntimeError("Non-finite loss")
-            loss.backward()
-            nn.utils.clip_grad_norm_(model.parameters(), 1.)
-            optimizer.step()
-            step += 1
-            stage_updates += 1
-            if (i + 1) % 50 == 0 or i + 1 == args.steps:
-                metrics = report()
-                score = metrics[current]
-                best = min(best, score)
-                print(json.dumps({"step": step, "stage": current,
-                                  "train_loss": round(loss.detach().item(), 4),
-                                  "evaluation": metrics}, ensure_ascii=False), flush=True)
-                # Promotion only after a minimum of 200 updates in current stage.
-                # Thresholds are provisional and should be calibrated with better held-out tests.
-                if args.stage == "auto" and stage_updates >= 200 and score <= THRESHOLDS[current] and stage_idx < len(STAGES)-1:
-                    stage_idx += 1
-                    stage_updates = 0
-                    best = 999.
-                    print("Stage promoted to:", STAGES[stage_idx], flush=True)
-                save()
-    if args.preview or args.eval_only:
-        for q in ("Olá", "Como estás hoje?", "Quanto é 4 + 6?"):
-            print("PREVIEW", repr(q), repr(sample(model, tok, q)), flush=True)
+        optim = torch.optim.AdamW(model.parameters(), lr=args.rate)
+        completed = []
+        steps = {s: 0 for s in STAGES[:-1]}
+        print("Novo modelo:", sum(p.numel() for p in model.parameters()), "parâmetros", flush=True)
+    if args.stage == "final":
+        if not all(s in completed for s in STAGES[:-1]):
+            ap.error("Final evaluation requires words, sentences and reasoning training first")
+        report(model, tok, words, "final")
+        return
+    idx = STAGES.index(args.stage)
+    if idx and STAGES[idx-1] not in completed:
+        ap.error(f"First train {STAGES[idx-1]}")
+    for i in range(args.steps):
+        if args.stage == "words":
+            seq, prefix = batch_word(tok, words, rng)
+        elif args.stage == "sentences":
+            seq, prefix = batch_sentence(tok, sentences, rng)
+        else:
+            seq, prefix = batch_math(tok, rng)
+        loss = step_loss(model, seq, prefix)
+        if loss is None:
+            continue
+        model.train()
+        optim.zero_grad(set_to_none=True)
+        loss.backward()
+        nn.utils.clip_grad_norm_(model.parameters(), 1.)
+        optim.step()
+        steps[args.stage] += 1
+        if (i+1) % 50 == 0 or i+1 == args.steps:
+            print(json.dumps({"stage": args.stage, "steps": steps[args.stage],
+                              "loss": round(loss.detach().item(), 4)}, ensure_ascii=False), flush=True)
+    if args.stage not in completed:
+        completed.append(args.stage)
+    config = {"dim": model.embed.embedding_dim, "heads": model.blocks[0].attn.num_heads,
+              "layers": len(model.blocks), "context": model.context}
+    state = {"model": model.state_dict(), "optimizer": optim.state_dict(),
+             "tokenizer": tok.to_dict(), "config": config,
+             "completed": completed, "steps": steps}
+    tmp = path.with_suffix(".tmp")
+    torch.save(state, tmp)
+    os.replace(tmp, path)
+    report(model, tok, words, args.stage)
+    print("Checkpoint:", path, flush=True)
 
 
 if __name__ == "__main__":
