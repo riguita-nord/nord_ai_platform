@@ -99,14 +99,28 @@ Experiências de diagnóstico foram executadas apenas em cópias temporárias:
 - Quatro respostas em blocos (800 atualizações) pioraram o holdout linguístico de 4,1909 para 6,3746 e só 1/4 saídas conhecidas ficou correta. Não foi aplicado.
 - Quatro respostas intercaladas com revisão e ancoragem (400 atualizações) melhoraram o holdout principal de 4,1909 para 3,2697, mas as quatro saídas conhecidas e as três perguntas novas continuaram incoerentes. Também não foi aplicado.
 
-Conclusão experimental: o Transformer original consegue memorizar uma resposta através dos seus pesos, mas o treino atual por bytes e teacher forcing não produz geração autoregressiva robusta nem generalização suficiente. A perda de validação, isoladamente, não é um critério adequado para aceitar capacidade conversacional. O checkpoint persistente ficou no estado validado de 96 passos; os testes de memorização regressivos não foram promovidos.
+Conclusão experimental: o Transformer original consegue memorizar uma resposta através dos seus pesos, mas o treino atual por bytes e teacher forcing não produz geração autoregressiva robusta nem generalização suficiente. A perda de validação, isoladamente, não é um critério adequado para aceitar capacidade conversacional. Naquela altura, o checkpoint persistente ficou no estado validado de 96 passos; os testes de memorização regressivos não foram promovidos.
 
 ## Experiência adicional de cobertura conversacional (cópia temporária)
 
-Foi testada uma hipótese com 12 perguntas/respostas básicas e conversacionais, incluindo paráfrases no treino, revisão intercalada do corpus e ancoragem dos pesos. Foram 1.400 atualizações adicionais sobre uma cópia do checkpoint com 96 passos.
+Foi testada uma hipótese com 12 perguntas/respostas básicas e conversacionais, incluindo paráfrases no treino, revisão intercalada do corpus e ancoragem dos pesos. Foram 1.300 atualizações adicionais sobre uma cópia do checkpoint com 96 passos.
 
 - As 12 perguntas treinadas geraram exatamente as 12 respostas pretendidas (12/12).
 - Nas cinco perguntas reservadas e reformuladas, exact match foi 0/5 e o filtro rejeitou 0/5 gerações como respostas aceitáveis.
 - As losses de holdout baixaram: linguagem 4,1909→2,9412; conversa natural 4,1419→2,4680; contexto 4,1904→2,7092; português 4,2584→3,5371.
 
-O treino aprendeu os exemplos específicos, mas não passou o teste de generalização por geração. Por isso, esses pesos não foram promovidos. O checkpoint persistente continua em 96 passos. A experiência confirma que, com o corpus local de 25 KB, baixar a loss ou acertar exemplos conhecidos não basta para obter respostas gerais coerentes.
+O treino aprendeu os exemplos específicos, mas não passou o teste de generalização por geração. Por isso, esses pesos não foram promovidos. Na altura, o checkpoint persistente ficou em 96 passos. A experiência confirma que, com o corpus local de 25 KB, baixar a loss ou acertar exemplos conhecidos não basta para obter respostas gerais coerentes.
+
+## Nova tentativa de treino básico (2026-11-06)
+
+Após reproduzir novamente respostas sem sentido no checkpoint pessoal, foram aceites 48 atualizações mistas adicionais. A loss principal reservada baixou de 4,1909 para 3,8599, mas a geração continuou a ser rejeitada nas perguntas inéditas sobre árvores, água e cumprimentos. O checkpoint pessoal ficou com 144 passos; a cópia anterior foi guardada em `~/.nord-brain/language-v1.before-chat-training.pt`.
+
+Foi acrescentado `scripts/experiment_basic_coherence.py`, que treina apenas uma cópia temporária do Transformer Nord com 12 perguntas/respostas básicas e avalia 8 paráfrases não usadas no treino. Três tentativas mostraram:
+
+- 96 atualizações distribuídas pelos 12 exemplos, sem ancoragem: loss de treino 3,8859→3,1245 e holdout 3,9369→3,2505; geração exata conhecida 0/12 e saídas aceites nas paráfrases 0/8.
+- 96 atualizações com taxa reduzida e ancoragem aos pesos: loss de treino 3,8859→3,6388 e holdout 3,9369→3,7091; exatidão conhecida 0/12 e paráfrases aceites 0/8.
+- 1.152 atualizações, 96 por exemplo, sem ancoragem: loss de treino 3,8859→0,0819 e holdout 3,9369→3,8676; respostas exatas 6/12 e paráfrases aceites 0/8. Esta grande diferença entre treino e holdout mostra sobreajuste.
+
+Num diagnóstico separado, 96 atualizações na mesma pergunta fizeram o Transformer reproduzir uma resposta específica quase corretamente, mas com caracteres acentuados substituídos por `?`. Isto demonstra memorização local, não generalização linguística. Nenhuma das cópias experimentais foi promovida. O gate de geração foi reforçado para rejeitar pseudo-palavras e padrões ortográficos implausíveis; os cinco testes de avaliação de candidatos passaram. A aplicação iniciou e encerrou corretamente pela CLI Python em diretório temporário. O launcher Bash `./nord` continua por validar num Linux/Ubuntu.
+
+Conclusão atual: o Transformer aprende os exemplos específicos quando recebe muitas atualizações, mas o treino supervisionado por bytes continua a falhar na geração coerente para paráfrases. As métricas de loss não justificam promover os pesos experimentais.
