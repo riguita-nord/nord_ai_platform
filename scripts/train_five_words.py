@@ -25,10 +25,10 @@ WORDS = {
 }
 CONJUGATION = {"eu": "ando", "tu": "andas", "ele": "anda", "nós": "andamos", "vós": "andais", "eles": "andam"}
 TEMPLATES_TRAIN = {
-    "classe": ["Qual é a classe gramatical de {w}?", "A palavra {w} é um substantivo ou um verbo?"],
-    "genero": ["Qual é o género gramatical de {w}?"],
-    "tipo": ["O que é {w}?", "A que categoria pertence {w}?"],
-    "plural": ["Qual é o plural de {w}?"],
+    "classe": ["Qual é a classe gramatical de {w}?", "A palavra {w} é um substantivo ou um verbo?", "Identifica a classe de {w}."],
+    "genero": ["Qual é o género gramatical de {w}?", "Indica o género da palavra {w}.", "A palavra {w} tem que género?"],
+    "tipo": ["O que é {w}?", "A que categoria pertence {w}?", "Indica o tipo de {w}."],
+    "plural": ["Qual é o plural de {w}?", "Escreve {w} no plural."],
 }
 TEMPLATES_TEST = {
     "classe": ["Como classificas gramaticalmente a palavra {w}?"],
@@ -128,73 +128,114 @@ def save(path, model, opt, tok, step, rng, best):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--steps", type=int, default=500)
+    ap.add_argument("--cycles", type=int, default=12, help="Número máximo de ciclos")
+    ap.add_argument("--steps-per-cycle", type=int, default=250)
     ap.add_argument("--batch-size", type=int, default=4)
-    ap.add_argument("--eval-every", type=int, default=250)
     ap.add_argument("--rate", type=float, default=0.0002)
+    ap.add_argument("--patience", type=int, default=3)
+    ap.add_argument("--target", type=float, default=100.0)
     ap.add_argument("--eval-only", action="store_true")
-    ap.add_argument("--data-dir", type=Path, default=Path.home()/".nord-brain"/"five-words")
+    ap.add_argument("--final-test", action="store_true", help="Executa teste reservado uma única vez, sem treinar")
+    ap.add_argument("--fresh", action="store_true", help="Inicia experiência nova num diretório vazio")
+    ap.add_argument("--data-dir", type=Path, default=Path.home()/".nord-brain"/"five-words-loop")
     args = ap.parse_args()
-    if not 1 <= args.steps <= 100000 or not 1 <= args.batch_size <= 16:
-        ap.error("Passos/batch inválidos")
-    if not 1 <= args.eval_every <= 10000 or not 0 < args.rate <= 0.001:
-        ap.error("Intervalo/taxa inválidos")
+    if not 1 <= args.cycles <= 1000 or not 1 <= args.steps_per_cycle <= 10000:
+        ap.error("Ciclos/passos inválidos")
+    if not 1 <= args.batch_size <= 16 or not 1 <= args.patience <= 100 or not 0 < args.rate <= .001:
+        ap.error("Parâmetros inválidos")
+    if not 0 < args.target <= 100:
+        ap.error("Objetivo inválido")
     torch.set_num_threads(max(1, min(4, int(os.getenv("NORD_THREADS", "2")))))
     rng = random.Random(1729)
     torch.manual_seed(1729)
     train = examples(TEMPLATES_TRAIN) + conjugation_examples() + sentence_examples()
-    test = examples(TEMPLATES_TEST) + conjugation_examples(True) + sentence_examples(True)
-    # Tokenizer is built from training material only; unknown words use UTF-8 bytes.
+    # Validação usa reformulações distintas, mas não deve ser considerada prova
+    # independente de compreensão; a avaliação final fica isolada.
+    validation = examples(TEMPLATES_TEST)
+    final_test = conjugation_examples(True) + sentence_examples(True)
     text = "\n".join(prompt(q) + a for q, a in train)
     tok = Tokenizer.fit(text, limit=512)
     model = Model(len(tok.vocab), **CONFIG)
     opt = torch.optim.AdamW(model.parameters(), lr=args.rate)
-    path = args.data_dir/"five-words-v1.pt"
-    best_path = args.data_dir/"five-words-v1-best.pt"
-    step, best = 0, -1
+    args.data_dir.mkdir(parents=True, exist_ok=True)
+    path = args.data_dir/"five-words-loop-v2.pt"
+    best_path = args.data_dir/"five-words-loop-v2-best.pt"
+    if args.fresh and (path.exists() or best_path.exists()):
+        ap.error("--fresh exige --data-dir novo e vazio; não apaga checkpoints")
+    cycle, best, stalled = 0, -1.0, 0
     if path.exists():
         state = torch.load(path, map_location="cpu", weights_only=True)
-        if state.get("experiment") != "five-words-v1" or state["tokenizer"] != tok.to_dict():
+        if state.get("experiment") != "five-words-loop-v2" or state["tokenizer"] != tok.to_dict():
             ap.error("Checkpoint incompatível")
         model.load_state_dict(state["model"])
         opt.load_state_dict(state["optimizer"])
+        rng.setstate(state["rng"])
+        cycle, best, stalled = state["cycle"], state["best"], state["stalled"]
         for group in opt.param_groups:
             group["lr"] = args.rate
-        step, best = state["step"], state["best"]
-        rng.setstate(state["rng"])
-        print("A retomar no passo", step, flush=True)
-    elif args.eval_only:
+        print("A retomar ciclo", cycle, flush=True)
+    elif args.eval_only or args.final_test:
         ap.error("Ainda não existe checkpoint")
-    if args.eval_only:
-        print(json.dumps(evaluate(model, tok, test), ensure_ascii=False), flush=True)
+    if args.eval_only or args.final_test:
+        if best_path.exists():
+            state = torch.load(best_path, map_location="cpu", weights_only=True)
+            model.load_state_dict(state["model"])
+        selected = final_test if args.final_test else validation
+        print(json.dumps({"tipo": "teste_final" if args.final_test else "validacao",
+                          **evaluate(model, tok, selected)}, ensure_ascii=False), flush=True)
         return
     encoded = [supervised(tok, q, a) for q, a in train]
-    args.data_dir.mkdir(parents=True, exist_ok=True)
-    print(json.dumps({"modelo": "Nord Brain 5 Palavras", "palavras": list(WORDS),
-                      "exemplos_treino": len(train), "perguntas_reservadas": len(test),
-                      "tokens": len(tok.vocab), "parametros": sum(p.numel() for p in model.parameters())},
-                     ensure_ascii=False), flush=True)
-    for i in range(args.steps):
-        model.train()
-        opt.zero_grad(set_to_none=True)
-        loss = torch.stack([loss_for(model, rng.choice(encoded)) for _ in range(args.batch_size)]).mean()
-        if not torch.isfinite(loss):
-            raise RuntimeError("Loss não finita")
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        opt.step()
-        step += 1
-        if step % 100 == 0:
-            print(json.dumps({"passo": step, "loss": round(float(loss.detach()), 4)}), flush=True)
-        if step % args.eval_every == 0 or i == args.steps - 1:
-            result = evaluate(model, tok, test)
-            print("AVALIAÇÃO CINCO PALAVRAS:", json.dumps({"passo": step, **result}, ensure_ascii=False), flush=True)
-            if result["precisao_pct"] > best:
-                best = result["precisao_pct"]
-                save(best_path, model, opt, tok, step, rng, best)
-            save(path, model, opt, tok, step, rng, best)
-    print("Treino concluído. Checkpoint:", path,
-          "| aprovação de produção: NÃO | generalização para palavras novas: NÃO TESTADA", flush=True)
+    print(json.dumps({"modelo": "Nord Brain 5 Palavras — loop v2",
+                      "treino": len(train), "validacao": len(validation),
+                      "teste_final_reservado": len(final_test),
+                      "tokens": len(tok.vocab)}, ensure_ascii=False), flush=True)
+    def snapshot(destination):
+        state = {"experiment": "five-words-loop-v2", "config": CONFIG,
+                 "model": model.state_dict(), "optimizer": opt.state_dict(),
+                 "tokenizer": tok.to_dict(), "rng": rng.getstate(),
+                 "cycle": cycle, "best": best, "stalled": stalled}
+        temp = destination.with_suffix(".tmp")
+        torch.save(state, temp)
+        os.replace(temp, destination)
+    for _ in range(args.cycles):
+        cycle += 1
+        for i in range(args.steps_per_cycle):
+            model.train()
+            opt.zero_grad(set_to_none=True)
+            loss = torch.stack([loss_for(model, rng.choice(encoded)) for _ in range(args.batch_size)]).mean()
+            if not torch.isfinite(loss):
+                raise RuntimeError("Loss não finita")
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            opt.step()
+        metrics = evaluate(model, tok, validation)
+        current = metrics["precisao_pct"]
+        improved = current > best
+        if improved:
+            best, stalled = current, 0
+            snapshot(best_path)
+        else:
+            stalled += 1
+            if best_path.exists():
+                saved = torch.load(best_path, map_location="cpu", weights_only=True)
+                model.load_state_dict(saved["model"])
+                opt.load_state_dict(saved["optimizer"])
+                # Reduz o passo de aprendizagem após rollback.
+                for group in opt.param_groups:
+                    group["lr"] = max(group["lr"] * .7, .00001)
+        snapshot(path)
+        print("CICLO:", json.dumps({"ciclo": cycle, "loss": round(float(loss.detach()), 4),
+              "validacao": metrics, "melhor_pct": best, "melhorou": improved,
+              "rollback": not improved, "falhas_consecutivas": stalled},
+              ensure_ascii=False), flush=True)
+        if best >= args.target:
+            print("Objetivo de validação atingido; teste final continua separado.", flush=True)
+            break
+        if stalled >= args.patience:
+            print("Paragem por falta de progresso; o melhor snapshot foi preservado.", flush=True)
+            break
+    print("Melhor snapshot:", best_path,
+          "| produção: NÃO | palavras novas: NÃO TESTADAS", flush=True)
 
 if __name__ == "__main__":
     main()
