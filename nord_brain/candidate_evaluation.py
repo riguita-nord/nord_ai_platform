@@ -29,6 +29,10 @@ def score_candidate(candidate, prompt):
     words = re.findall(r'\w+', value.casefold(), re.UNICODE)
     if not words:
         return None
+    # A single-character function word such as "e" is not a conversational
+    # answer, even though it appears in the short-reply vocabulary below.
+    if len(words) == 1 and len(words[0]) < 2:
+        return None
     if sum(ch.isalpha() for ch in value) / max(1, len(value)) < .55:
         return None
     if len(words) >= 6:

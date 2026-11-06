@@ -6,3 +6,9 @@ def test_rejects_unintelligible_output():
 
 def test_rejects_empty_candidates():
     assert choose_candidate([], 'Olá') is None
+
+def test_rejects_lone_function_word():
+    assert score_candidate('e', 'tree?') is None
+    assert score_candidate('a', 'tree?') is None
+    assert choose_candidate(['e'], 'tree?') is None
+    assert choose_candidate(['e', 'Sim'], 'tree?') == 'Sim'

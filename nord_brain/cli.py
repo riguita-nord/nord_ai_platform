@@ -1,12 +1,17 @@
 """Terminal conversation first. Diagnostic commands are optional."""
 from __future__ import annotations
 import argparse
-import fcntl
 import json
 import os
 import shlex
 from pathlib import Path
 from .runtime import Brain
+
+try:
+    import fcntl
+except ImportError:  # Windows development environment; Linux remains supported.
+    fcntl = None
+    import msvcrt
 
 HELP='''Fala normalmente comigo. Exemplos:
   Olá
@@ -242,12 +247,20 @@ def main(argv=None):
     parser.add_argument('--data',type=Path,default=Path(os.environ.get('NORD_DATA',str(Path.home()/'.nord-brain'))))
     args=parser.parse_args(argv)
     # A single writer owns the checkpoint for the entire terminal session.
-    # flock is released by the OS even if the process crashes.
+    # The OS releases this lock if the process exits unexpectedly.
     args.data.mkdir(parents=True, exist_ok=True)
     lock_file = (args.data / '.nord-instance.lock').open('a+')
     try:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
+        if fcntl is not None:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        else:
+            lock_file.seek(0, os.SEEK_END)
+            if lock_file.tell() == 0:
+                lock_file.write('\0')
+                lock_file.flush()
+            lock_file.seek(0)
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+    except (BlockingIOError, OSError):
         lock_file.close()
         print('ERRO: já existe outra instância Nord a utilizar este cérebro. '
               'Fecha-a antes de iniciar outra sessão.')
@@ -277,6 +290,10 @@ def main(argv=None):
         print('\nA terminar...')
     finally:
         brain.close()
+        if fcntl is None:
+            lock_file.seek(0)
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+        lock_file.close()
         print('Estado do cérebro guardado.')
 
 
