@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import torch
 from torch.nn import functional as F
 from train_language_v2 import Model
-from vocabulary_eval import encode_bytes, forced_loss
+from vocabulary_eval import encode_bytes
 
 # Curated PT-PT concept families. Each concept has multiple distinct relations.
 # Entire concepts are reserved for evaluation; training cannot memorise them.
@@ -59,8 +59,8 @@ CONCEPTS = {
 HELD_OUT = {"banana", "comboio", "sofá", "lua", "caderno", "professor", "triste", "lento", "frio", "família"}
 TRAIN = {k:v for k,v in CONCEPTS.items() if k not in HELD_OUT}
 TEST = {k:v for k,v in CONCEPTS.items() if k in HELD_OUT}
-ANSWERS = sorted({x for v in CONCEPTS.values() for x in v})
-PROMPTS = ("Relação de {word}: ", "Conceito de {word}: ", "Associação de {word}: ")
+ANSWERS = sorted({v[0] for v in CONCEPTS.values()})
+PROMPTS = ("Categoria de {word}: ", "Classe de {word}: ", "Tipo de {word}: ")
 # This benchmark tests the first relation only; other relations are taught
 # to increase supervision but cannot prove full word meaning.
 def example(word, relation, prompt):
@@ -70,8 +70,22 @@ def example(word, relation, prompt):
 
 @torch.inference_mode()
 def score(model, word, answer, template):
-    ids, prefix = example(word, answer, template)
-    return forced_loss(model, ids, prefix)
+    """Conditional log probability of complete answer, adjusted by unconditional prior.
+
+    Unlike mean token loss, this does not reward short answers simply for
+    having fewer target tokens. Prior adjustment reduces label popularity bias.
+    """
+    def log_likelihood(prompt_word):
+        ids, prefix = example(prompt_word, answer, template)
+        x = torch.tensor(ids[:-1], dtype=torch.long)[None]
+        targets = torch.tensor(ids[1:], dtype=torch.long)
+        logits = model(x)[0]
+        token_logp = F.log_softmax(logits, dim=-1)
+        positions = torch.arange(prefix - 1, len(targets))
+        return float(token_logp[positions, targets[positions]].sum())
+    return log_likelihood(word) - log_likelihood("")
+
+
 
 
 @torch.inference_mode()
@@ -79,7 +93,7 @@ def evaluate(model, items):
     model.eval()
     rows = []
     for word, relations in items.items():
-        # Fixed question format, candidates include unseen labels.
+        # Fixed question format; only category labels are valid candidates.
         scores = {answer: score(model, word, answer, PROMPTS[0]) for answer in ANSWERS}
         predicted = min(scores, key=scores.get)
         rows.append({"word":word, "expected":relations[0],
@@ -93,17 +107,17 @@ def report(model):
     def accuracy(rows):
         return sum(r["correct"] for r in rows) / len(rows)
     train_acc, test_acc = accuracy(train), accuracy(test)
-    # Deliberately strict; passing does not imply knowledge of every word.
+    # Diagnostic gate only; the shared language model is not unlocked by this script.
     passed = train_acc >= .90 and test_acc >= .80
     print(json.dumps({"train_concepts":len(train), "held_out_concepts":len(test),
                       "train_accuracy_pct":round(100*train_acc,1),
                       "generalisation_accuracy_pct":round(100*test_acc,1),
-                      "stage_2_unlocked":passed}, ensure_ascii=False),flush=True)
+                      "vocabulary_probe_passed":passed, "stage_2_unlocked":False}, ensure_ascii=False),flush=True)
     print("PALAVRAS DE TREINO:",flush=True)
     for row in train: print(json.dumps(row,ensure_ascii=False),flush=True)
     print("CONCEITOS RESERVADOS:",flush=True)
     for row in test: print(json.dumps(row,ensure_ascii=False),flush=True)
-    print("NOTA: este teste mede escolha de uma relação entre candidatas; "
+    print("NOTA: teste de classificação por categoria, com ajuste ao prior; "
           "não prova que o modelo saiba o significado de todas as palavras.",flush=True)
     return passed
 
@@ -139,7 +153,8 @@ def main():
     if args.eval_only:
         report(model)
         return
-    examples=[example(w,r,p) for w,rels in TRAIN.items() for r in rels for p in PROMPTS]
+    # One unambiguous category target per question; other relations require separately labelled tasks.
+    examples=[example(w,rels[0],p) for w,rels in TRAIN.items() for p in PROMPTS]
     for i in range(args.steps):
         ids,prefix=rng.choice(examples)
         x=torch.tensor(ids[:-1],dtype=torch.long)[None]
