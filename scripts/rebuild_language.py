@@ -110,15 +110,20 @@ def main():
         dialogue_pos = 0
         text_updates = dialogue_updates = 0
         text_loss_total = dialogue_loss_total = 0.0
+        corpus_bytes = corpus.encode("utf-8")
         for i in range(args.steps):
             # Balanced scheduling across each 100-update block.
             text_step = ((i * round(args.text_ratio * 100)) % 100) < round(args.text_ratio * 100)
             if text_step:
                 # Train a full context-sized window, not one tiny slice of
                 # a 1400-character region selected by the old fixed stride.
-                size = min(core.model.config.context - 2, len(corpus))
-                start = rng.randrange(max(1, len(corpus) - size + 1))
-                segment = corpus[start:start + size]
+                # UTF-8 tokenization is byte-based: never sample by character count.
+                # Decode only a complete UTF-8 span, allowing for multi-byte letters.
+                size = min(core.model.config.context - 2, len(corpus_bytes))
+                start = rng.randrange(max(1, len(corpus_bytes) - size + 1))
+                segment = corpus_bytes[start:start + size].decode("utf-8", errors="ignore")
+                if len(segment.encode("utf-8")) < 2:
+                    raise RuntimeError("Amostra textual demasiado curta")
                 loss = core.train_text_span(segment, rate=args.rate)
                 text_updates += 1
                 text_loss_total += loss
