@@ -17,6 +17,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from train_language_v2 import Model, Tokenizer, PATTERN
+from vocabulary_eval import TRAIN_PAIRS, print_vocabulary_report
 
 STAGES = ("words", "sentences", "reasoning", "final")
 WORD_RE = re.compile(r"^[^\W\d_]{3,}$", re.UNICODE)
@@ -34,6 +35,13 @@ def batch_word(tok, words, rng):
     word = rng.choice(words)
     seq = tok.encode(word, bos=True, eos=True)
     return seq, 0
+
+
+def batch_association(tok, rng):
+    word, answer = rng.choice(TRAIN_PAIRS)
+    prefix = tok.encode(f"Associação: {word} -> ", bos=True)
+    suffix = tok.encode(answer, eos=True)
+    return prefix + suffix, len(prefix)
 
 
 def batch_sentence(tok, sentences, rng):
@@ -125,18 +133,9 @@ def evaluate_math(model, tok):
     return results
 
 
-def report(model, tok, words, stage):
+def report(model, tok, words, stage, corpus):
     if stage == "words":
-        results = evaluate_words(model, tok, words)
-        print("VOCABULÁRIO — palavra real vs. palavra inventada:", flush=True)
-        print("Teste de preferência probabilística, não compreensão de significado.", flush=True)
-        for p in results:
-            print(json.dumps(p, ensure_ascii=False), flush=True)
-        correct = sum(p["correct"] for p in results)
-        print(f"ACERTOS: {correct}/{len(results)} ({100 * correct / max(1, len(results)):.1f}%)", flush=True)
-        print("PALAVRAS COM RESULTADO POSITIVO:", ", ".join(p["word"] for p in results if p["correct"]), flush=True)
-        print("PALAVRAS EM QUE FALHOU:", ", ".join(p["word"] for p in results if not p["correct"]), flush=True)
-        print("AVISO: palavras frequentes podem ser tokens inteiros; a comparação é enviesada.", flush=True)
+        print_vocabulary_report(model, tok, words, corpus)
     elif stage == "sentences":
         print("FRASES — exemplos gerados:", flush=True)
         for p in evaluate_sentences(model, tok):
@@ -147,7 +146,7 @@ def report(model, tok, words, stage):
             print(json.dumps(p, ensure_ascii=False), flush=True)
     else:
         for section in ("words", "sentences", "reasoning"):
-            report(model, tok, words, section)
+            report(model, tok, words, section, corpus)
 
 
 def main():
@@ -202,7 +201,7 @@ def main():
     if args.eval_only:
         if not path.exists():
             ap.error("No checkpoint to evaluate")
-        report(model, tok, words, args.stage)
+        report(model, tok, words, args.stage, corpus)
         return
     if args.stage == "final":
         if not all(s in completed for s in STAGES[:-1]):
@@ -214,7 +213,7 @@ def main():
         ap.error(f"First train {STAGES[idx-1]}")
     for i in range(args.steps):
         if args.stage == "words":
-            seq, prefix = batch_word(tok, words, rng)
+            seq, prefix = (batch_association(tok, rng) if i % 3 == 0 else batch_word(tok, words, rng))
         elif args.stage == "sentences":
             seq, prefix = batch_sentence(tok, sentences, rng)
         else:
