@@ -93,6 +93,14 @@ class Model(nn.Module):
         self.norm = nn.LayerNorm(dim)
         self.head = nn.Linear(dim, vocab, bias=False)
         self.head.weight = self.embed.weight
+        self.apply(self._init_weights)
+
+    @staticmethod
+    def _init_weights(module):
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if getattr(module, "bias", None) is not None:
+                nn.init.zeros_(module.bias)
 
     def forward(self, ids):
         b, n = ids.shape
@@ -107,7 +115,7 @@ def evaluate(model, tokenizer, examples):
     total, count = 0., 0
     with torch.inference_mode():
         for question, answer in examples:
-            prefix = tokenizer.encode("Tu: " + question + "\nNord: ", bos=True)
+            prefix = tokenizer.encode((question if question.startswith("Tu: ") else "Tu: " + question) + "\nNord: ", bos=True)
             suffix = tokenizer.encode(answer, eos=True)
             seq = (prefix + suffix)[-model.context - 1:]
             labels = torch.tensor(seq[1:], dtype=torch.long)
@@ -204,6 +212,8 @@ def main():
             ids = torch.tensor(seq[:-1], dtype=torch.long)[None]
             labels = torch.tensor(seq[1:], dtype=torch.long)
         else:
+            if dialogue_index and dialogue_index % len(dialogues) == 0:
+                rng.shuffle(dialogues)
             question, answer = dialogues[dialogue_index % len(dialogues)]
             dialogue_index += 1
             prefix = tokenizer.encode("Tu: " + question + "\nNord: ", bos=True)
