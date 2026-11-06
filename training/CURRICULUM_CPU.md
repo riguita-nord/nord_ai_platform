@@ -1,16 +1,27 @@
-# Nord Brain — currículo experimental em CPU
+# Nord Brain — quatro treinos manuais (CPU)
 
-Script: `scripts/train_curriculum.py`. Checkpoint separado: `~/.nord-brain/curriculum/curriculum.pt`. Não modifica os modelos V1, V2 ou V3.
+Cada treino é executado separadamente e apresenta o resultado no fim. **Não existe avanço automático**.
 
 ```bash
 cd ~/nord_ai_platform
 git pull origin main
 .venv/bin/python -m compileall -q scripts/train_curriculum.py
-NORD_THREADS=2 .venv/bin/python scripts/train_curriculum.py --steps 100 --preview
+
+# 1. Vocabulário: no fim mostra palavras e a respetiva perda neural
+NORD_THREADS=2 .venv/bin/python scripts/train_curriculum.py --stage words --steps 100
+
+# 2. Construção de frases: no fim mostra exemplos gerados
+NORD_THREADS=2 .venv/bin/python scripts/train_curriculum.py --stage sentences --steps 100
+
+# 3. Raciocínio e lógica: no fim testa contas não usadas no treino
+NORD_THREADS=2 .venv/bin/python scripts/train_curriculum.py --stage reasoning --steps 100
+
+# 4. Exame final: não treina; mostra os três resultados
+NORD_THREADS=2 .venv/bin/python scripts/train_curriculum.py --stage final
 ```
 
-Continuação: `NORD_THREADS=2 .venv/bin/python scripts/train_curriculum.py --steps 500 --preview`. Avaliação sem treino: `NORD_THREADS=2 .venv/bin/python scripts/train_curriculum.py --eval-only`.
+Cada etapa pode ser repetida para continuar a treinar. O checkpoint está isolado em `~/.nord-brain/curriculum/curriculum-four.pt`, para não confundir com o protótipo anterior `curriculum.pt` ou com V1/V2/V3.
 
-Quatro etapas: `words`, `sentences`, `reasoning`, `prediction`. A promoção automática usa limiares provisórios de perda de previsão em pequenos conjuntos reservados, depois de pelo menos 200 atualizações na etapa. **Estes testes não certificam domínio linguístico, raciocínio, previsão ou capacidade de generalização.** O corpus é utilizado nas duas primeiras etapas; nas seguintes são gerados exemplos aritméticos simples com revisão textual a cada cinco atualizações. A fase de previsão é atualmente treino supervisionado, não reinforcement learning.
+**Interpretação correta dos resultados:** o vocabulário apresenta as 30 palavras com menor perda de previsão entre 250 candidatas frequentes do corpus. Não demonstra que o modelo compreenda os seus significados nem é uma contagem de palavras dominadas. A etapa de frases mostra geração livre, que poderá ainda ser incoerente. O raciocínio usa contas simples; não demonstra raciocínio geral. A fase final apenas executa as avaliações, sem alterar pesos.
 
-Limitações conhecidas: tokenizer híbrido de palavras e bytes, não BPE; as etapas de palavras e frases usam atualmente a mesma tarefa de modelação causal de texto; os exemplos reservados são pequenos; não há testes de generalização robustos, sistema de recompensa, RLHF, DPO, PPO ou GRPO. Os limiares poderão nunca ser atingidos. Não aumente parâmetros sem medir RAM/velocidade. Este código ainda não foi executado na VM do utilizador.
+**Limitações atuais:** o tokenizer continua híbrido palavra/byte (não BPE), o treino de palavras não ensina explicitamente semântica, os testes são pequenos, o treino de raciocínio é supervisionado e não existe aprendizagem por recompensa. O código ainda não foi validado na VM do utilizador.
