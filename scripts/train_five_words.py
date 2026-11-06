@@ -233,6 +233,13 @@ def main():
     for _ in range(args.cycles):
         cycle += 1
         for i in range(args.steps_per_cycle):
+            if i % args.diagnose_every == 0:
+                diagnostic = training_diagnostics(model, tok, groups)
+                print("PROFESSOR:", json.dumps({"ciclo": cycle, "passo": i,
+                      "dominio_treino_pct": diagnostic,
+                      "prioridade": min(diagnostic, key=diagnostic.get)},
+                      ensure_ascii=False), flush=True)
+            group = choose_group(rng, encoded_groups, diagnostic)
             model.train()
             opt.zero_grad(set_to_none=True)
             loss = torch.stack([loss_for(model, rng.choice(encoded_groups[group])) for _ in range(args.batch_size)]).mean()
@@ -241,7 +248,8 @@ def main():
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
-        metrics = evaluate(model, tok, validation)\n        diagnostic = training_diagnostics(model, tok, groups)
+        metrics = evaluate(model, tok, validation)
+        diagnostic = training_diagnostics(model, tok, groups)
         current = metrics["precisao_pct"]
         improved = current > best
         if improved:
