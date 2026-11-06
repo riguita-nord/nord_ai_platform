@@ -20,7 +20,7 @@ from train_vocabulary_v2 import TRAIN, TEST
 KINDS=("categoria","propriedade","contexto")
 STAGES=("spelling","lexical","paraphrase","context","expansion")
 CONFIG={"dim":192,"heads":6,"layers":6,"context":256}
-Q_TRAIN=("Categoria de {word}: ","{kind} de {word}: ","Indica a {kind} de {word}: ")
+Q_TRAIN=("{kind} de {word}: ","Indica a {kind} de {word}: ","Sobre {word}, diz a {kind}: ")
 Q_HELD="Qual é a {kind} associada a {word}? "
 CONTEXTS=(
     "Ficha: {word}; categoria: {cat}; propriedade: {prop}; contexto: {ctx}.\nPergunta: {question}",
