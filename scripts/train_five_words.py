@@ -126,6 +126,39 @@ def save(path, model, opt, tok, step, rng, best):
     torch.save(state, tmp)
     os.replace(tmp, path)
 
+def training_diagnostics(model, tok, groups):
+    """Diagnóstico APENAS com perguntas de treino; nunca usa validação para ensinar."""
+    scores = {}
+    for name, pairs in groups.items():
+        scores[name] = evaluate(model, tok, pairs)["precisao_pct"]
+    return scores
+
+
+def weighted_training_groups():
+    groups = {}
+    for key in TEMPLATES_TRAIN:
+        groups[key] = [(template.format(w=word), facts[key])
+                       for word, facts in WORDS.items()
+                       for template in TEMPLATES_TRAIN[key]]
+    groups["conjugacao"] = conjugation_examples()
+    groups["frases"] = sentence_examples()
+    return groups
+
+
+def choose_group(rng, groups, diagnostic):
+    # Reforço baseado exclusivamente em desempenho sobre material de treino.
+    # Todas as competências mantêm probabilidade positiva (revisão espaçada simples).
+    keys = list(groups)
+    weights = [1.0 + (100.0 - diagnostic.get(k, 0.0)) / 20.0 for k in keys]
+    return rng.choices(keys, weights=weights, k=1)[0]
+
+
+def check_dataset(train, validation, final_test):
+    sets = [set(q for q, _ in pairs) for pairs in (train, validation, final_test)]
+    if any(sets[i] & sets[j] for i in range(3) for j in range(i + 1, 3)):
+        raise RuntimeError("Perguntas sobrepostas entre treino, validação e teste final")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--cycles", type=int, default=12, help="Número máximo de ciclos")
@@ -133,7 +166,7 @@ def main():
     ap.add_argument("--batch-size", type=int, default=4)
     ap.add_argument("--rate", type=float, default=0.0002)
     ap.add_argument("--patience", type=int, default=3)
-    ap.add_argument("--target", type=float, default=100.0)
+    ap.add_argument("--target", type=float, default=100.0)\n    ap.add_argument("--diagnose-every", type=int, default=50)
     ap.add_argument("--eval-only", action="store_true")
     ap.add_argument("--final-test", action="store_true", help="Executa teste reservado uma única vez, sem treinar")
     ap.add_argument("--fresh", action="store_true", help="Inicia experiência nova num diretório vazio")
@@ -143,7 +176,7 @@ def main():
         ap.error("Ciclos/passos inválidos")
     if not 1 <= args.batch_size <= 16 or not 1 <= args.patience <= 100 or not 0 < args.rate <= .001:
         ap.error("Parâmetros inválidos")
-    if not 0 < args.target <= 100:
+    if not 1 <= args.diagnose_every <= args.steps_per_cycle:\n        ap.error("Diagnóstico inválido")\n    if not 0 < args.target <= 100:
         ap.error("Objetivo inválido")
     torch.set_num_threads(max(1, min(4, int(os.getenv("NORD_THREADS", "2")))))
     rng = random.Random(1729)
@@ -184,7 +217,7 @@ def main():
         print(json.dumps({"tipo": "teste_final" if args.final_test else "validacao",
                           **evaluate(model, tok, selected)}, ensure_ascii=False), flush=True)
         return
-    encoded = [supervised(tok, q, a) for q, a in train]
+    encoded_groups = {key: [supervised(tok, q, a) for q, a in pairs]\n                      for key, pairs in groups.items()}\n    diagnostic = {key: 0.0 for key in groups}
     print(json.dumps({"modelo": "Nord Brain 5 Palavras — loop v2",
                       "treino": len(train), "validacao": len(validation),
                       "teste_final_reservado": len(final_test),
@@ -202,13 +235,13 @@ def main():
         for i in range(args.steps_per_cycle):
             model.train()
             opt.zero_grad(set_to_none=True)
-            loss = torch.stack([loss_for(model, rng.choice(encoded)) for _ in range(args.batch_size)]).mean()
+            loss = torch.stack([loss_for(model, rng.choice(encoded_groups[group])) for _ in range(args.batch_size)]).mean()
             if not torch.isfinite(loss):
                 raise RuntimeError("Loss não finita")
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
-        metrics = evaluate(model, tok, validation)
+        metrics = evaluate(model, tok, validation)\n        diagnostic = training_diagnostics(model, tok, groups)
         current = metrics["precisao_pct"]
         improved = current > best
         if improved:
@@ -225,7 +258,7 @@ def main():
                     group["lr"] = max(group["lr"] * .7, .00001)
         snapshot(path)
         print("CICLO:", json.dumps({"ciclo": cycle, "loss": round(float(loss.detach()), 4),
-              "validacao": metrics, "melhor_pct": best, "melhorou": improved,
+              "validacao": metrics, "dominio_treino_pct": diagnostic, "melhor_pct": best, "melhorou": improved,
               "rollback": not improved, "falhas_consecutivas": stalled},
               ensure_ascii=False), flush=True)
         if best >= args.target:
