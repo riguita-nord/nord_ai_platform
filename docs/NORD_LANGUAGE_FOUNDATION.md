@@ -1,66 +1,49 @@
-# Nord Language Foundation — experiência PT-PT
+# Nord Brain — treino unificado no Transformer original
 
-Esta experiência usa o Transformer próprio do projeto (6 camadas, 192 dimensões).
-Não usa modelos externos nem altera o modelo de produção.
+O único Transformer oficial é `nord_brain/core.py` (`NordTransformer` / `NeuralCore`).
+A aplicação continua a usar os seus comandos de treino internos, que atuam
+sobre este mesmo modelo. O novo comando de terminal `scripts/train_nord.py`
+permite pré-treinar texto PT-PT no MESMO formato de checkpoint.
 
-## Dados
+## Segurança antes de começar
 
-O pré-treino requer um ficheiro UTF-8 de texto português europeu, com pelo
-menos 100 KB. Por omissão: `training/dataset/train.txt`.
+**Fecha `./nord` e quaisquer outros processos que treinem o cérebro.**
+O treinador externo não partilha o bloqueio de escrita da aplicação.
+Faz backup de `~/.nord-brain/brain-v2.pt` antes da primeira execução.
+O script cria também `brain-v2.pre-unified.pt` se ainda não existir.
 
-Verifica manualmente a qualidade, licença e origem do corpus. Um corpus pequeno
-ou repetitivo pode produzir perda baixa sem boa generalização. O script divide
-os tokens em 95% treino / 5% validação por posição, não mistura exemplos;
-documentos duplicados entre secções podem contaminar a avaliação. Para uma
-avaliação rigorosa, prepara documentos separados e testes externos.
-
-## 1. Pré-treinar
+## Executar
 
 ```bash
 cd ~/nord_ai_platform
 git pull origin main
-.venv/bin/python -m compileall -q scripts/train_foundation_ptpt.py scripts/train_five_words.py
-NORD_THREADS=2 .venv/bin/python scripts/train_foundation_ptpt.py \
+.venv/bin/python -m compileall -q scripts/train_nord.py
+NORD_THREADS=2 .venv/bin/python scripts/train_nord.py \
   --corpus training/dataset/train.txt \
-  --steps 2000 \
-  --data-dir ~/.nord-brain/foundation-ptpt-v1
+  --checkpoint ~/.nord-brain/brain-v2.pt \
+  --steps 1000
 ```
 
-O comando pode ser repetido para continuar mais 2000 passos. Os pesos ficam
-em `~/.nord-brain/foundation-ptpt-v1/foundation-ptpt-v1.pt`.
-A validação reporta perda, **não** percentagem de compreensão.
+`--eval-only` calcula a perda de validação sem atualizar pesos.
+O treinador guarda o checkpoint apenas se a perda na secção reservada
+não piorar mais do que `--max-regression`. Isto não certifica compreensão
+e não substitui testes independentes de gramática e diálogo.
 
-## 2. Especializar nas cinco palavras
+## Arquivos experimentais removidos do Git
 
-```bash
-NORD_THREADS=2 .venv/bin/python scripts/train_five_words.py \
-  --foundation ~/.nord-brain/foundation-ptpt-v1/foundation-ptpt-v1.pt \
-  --fresh --data-dir ~/.nord-brain/five-words-from-foundation-v1 \
-  --cycles 12 --steps-per-cycle 250 --diagnose-every 50 \
-  --batch-size 4 --patience 5 --target 100
-```
+Foram retirados `scripts/train_language_v2.py`,
+`scripts/train_foundation_ptpt.py` e `scripts/train_five_words.py`.
+Os checkpoints experimentais existentes no disco **não são apagados**;
+os seus pesos não são compatíveis com o Transformer principal e não
+devem ser carregados como `brain-v2.pt`.
 
-Para retomar o fine-tuning, repete sem `--fresh`, com o mesmo
-`--foundation` e `--data-dir`.
+Os módulos de currículos `nord_brain/linguistic_training.py`,
+`portuguese_training.py` e `dialogue_training.py` continuam a ser
+fontes de exercícios e rotinas da aplicação, não Transformers separados.
 
-## 3. Avaliar
+## Próximas verificações
 
-```bash
-NORD_THREADS=2 .venv/bin/python scripts/train_five_words.py \
-  --data-dir ~/.nord-brain/five-words-from-foundation-v1 --eval-only
-
-NORD_THREADS=2 .venv/bin/python scripts/train_five_words.py \
-  --data-dir ~/.nord-brain/five-words-from-foundation-v1 --final-test
-```
-
-O teste final deve ser usado com parcimónia, não para escolher
-hiperparâmetros. Os 20 exemplos de validação são reformulações sobre as
-mesmas cinco palavras; não provam generalização a novas palavras.
-
-## Limitações
-
-Esta é uma primeira integração de pré-treino + fine-tuning, **não** uma base
-linguística validada. Ainda falta avaliar um tokenizer subword alternativo,
-construir um corpus PT-PT de qualidade comprovada, testes semânticos com
-palavras inéditas e proteção contra esquecimento catastrófico.
-Não promover automaticamente para produção.
+Precisamos de testes de integração do CLI, avaliação de esquecimento,
+generalização com palavras inéditas e prevenção de sobreposição de
+documentos entre treino e validação. Não executar este treino em paralelo
+com a aplicação.
