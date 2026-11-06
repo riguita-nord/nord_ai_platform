@@ -119,7 +119,7 @@ def main():
                 size = min(core.model.config.context - 2, len(corpus))
                 start = rng.randrange(max(1, len(corpus) - size + 1))
                 segment = corpus[start:start + size]
-                loss = core.train_text(segment, updates=1, rate=args.rate)
+                loss = core.train_text_span(segment, rate=args.rate)
                 text_updates += 1
                 text_loss_total += loss
             else:
