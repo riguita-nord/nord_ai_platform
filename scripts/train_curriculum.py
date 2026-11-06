@@ -135,7 +135,7 @@ def evaluate_math(model, tok):
 
 def report(model, tok, words, stage, corpus):
     if stage == "words":
-        print_vocabulary_report(model, tok, words, corpus)
+        print_vocabulary_print_vocabulary_report(model, tok, words, corpus)
     elif stage == "sentences":
         print("FRASES — exemplos gerados:", flush=True)
         for p in evaluate_sentences(model, tok):
@@ -206,7 +206,7 @@ def main():
     if args.stage == "final":
         if not all(s in completed for s in STAGES[:-1]):
             ap.error("Final evaluation requires words, sentences and reasoning training first")
-        report(model, tok, words, "final")
+        report(model, tok, words, "final", corpus)
         return
     idx = STAGES.index(args.stage)
     if idx and STAGES[idx-1] not in completed:
