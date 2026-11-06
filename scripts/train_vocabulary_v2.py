@@ -69,7 +69,7 @@ def example(word, relation, prompt):
 
 
 @torch.inference_mode()
-def score(model, word, answer, template):
+def score(model, word, answer, template, adjust_prior=True):
     """Conditional log probability of complete answer, adjusted by unconditional prior.
 
     Unlike mean token loss, this does not reward short answers simply for
@@ -83,25 +83,27 @@ def score(model, word, answer, template):
         token_logp = F.log_softmax(logits, dim=-1)
         positions = torch.arange(prefix - 1, len(targets))
         return float(token_logp[positions, targets[positions]].sum())
-    return log_likelihood(word) - log_likelihood("")
+    conditional = log_likelihood(word)
+    return conditional - log_likelihood("") if adjust_prior else conditional
 
 
 
 
 @torch.inference_mode()
-def evaluate(model, items):
+def evaluate(model, items, template=None, adjust_prior=True):
     model.eval()
     rows = []
+    template = template or PROMPTS[0]
     for word, relations in items.items():
         # Fixed question format; only category labels are valid candidates.
-        scores = {answer: score(model, word, answer, PROMPTS[0]) for answer in ANSWERS}
+        scores = {answer: score(model, word, answer, template, adjust_prior) for answer in ANSWERS}
         predicted = min(scores, key=scores.get)
         rows.append({"word":word, "expected":relations[0],
                      "predicted":predicted, "correct":predicted == relations[0]})
     return rows
 
 
-def report(model):
+def report(model, diagnostic=False):
     train = evaluate(model, TRAIN)
     test = evaluate(model, TEST)
     def accuracy(rows):
@@ -117,6 +119,16 @@ def report(model):
     for row in train: print(json.dumps(row,ensure_ascii=False),flush=True)
     print("CONCEITOS RESERVADOS:",flush=True)
     for row in test: print(json.dumps(row,ensure_ascii=False),flush=True)
+    if diagnostic:
+        for template in (PROMPTS[0], "Relação de {word}: "):
+            for prior in (False, True):
+                tr = evaluate(model, TRAIN, template, prior)
+                te = evaluate(model, TEST, template, prior)
+                print(json.dumps({"diagnostic_prompt":template, "prior_adjustment":prior,
+                    "train_accuracy_pct":round(100*accuracy(tr),1),
+                    "heldout_accuracy_pct":round(100*accuracy(te),1),
+                    "predicted_distribution":dict(__import__("collections").Counter(row["predicted"] for row in tr))},
+                    ensure_ascii=False),flush=True)
     print("NOTA: teste de classificação por categoria, com ajuste ao prior; "
           "não prova que o modelo saiba o significado de todas as palavras.",flush=True)
     return passed
@@ -126,6 +138,7 @@ def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--steps",type=int,default=500)
     ap.add_argument("--eval-only",action="store_true")
+    ap.add_argument("--diagnose",action="store_true",help="Compare original/new prompts and raw/prior-adjusted scores")
     ap.add_argument("--rate",type=float,default=.0002)
     ap.add_argument("--data-dir",type=Path,default=Path.home()/".nord-brain"/"curriculum")
     args=ap.parse_args()
@@ -151,7 +164,7 @@ def main():
         done=0
         print("Novo modelo de vocabulário V2:",sum(p.numel() for p in model.parameters()),flush=True)
     if args.eval_only:
-        report(model)
+        report(model, diagnostic=args.diagnose)
         return
     # One unambiguous category target per question; other relations require separately labelled tasks.
     examples=[example(w,rels[0],p) for w,rels in TRAIN.items() for p in PROMPTS]
@@ -176,7 +189,7 @@ def main():
     torch.save(state,tmp)
     os.replace(tmp,path)
     print("Checkpoint:",path,flush=True)
-    report(model)
+    report(model, diagnostic=args.diagnose)
 
 
 if __name__=="__main__":
