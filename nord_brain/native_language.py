@@ -55,6 +55,19 @@ def coherent_sample(text: str, *, creative: bool=False) -> bool:
     words=re.findall(r'\w+',value.casefold(),re.UNICODE)
     if len(set(words))/max(1,len(words)) < .52:
         return False
+    # Small byte models sometimes produce pseudo-words while satisfying the
+    # function-word ratio below (for example ``eutaaosbs``). Reject common
+    # orthographic corruption patterns instead of presenting them as prose.
+    if re.search(r'\w*[a-z][A-Z]\w*', value):
+        return False
+    if any(cluster in word for word in words for cluster in ('mv', 'sb', 'bs')):
+        return False
+    allowed_initial = {'bl','br','cl','cr','dr','fl','fr','gl','gr','pl','pr','tr'}
+    for word in words:
+        if (len(word) > 2 and word[0] in 'bcdfghjklmnpqrstvwxyz'
+                and word[1] in 'bcdfghjklmnpqrstvwxyz'
+                and word[:2] not in allowed_initial):
+            return False
     ngrams=[' '.join(words[i:i+3]) for i in range(max(0,len(words)-2))]
     if len(ngrams)>3 and len(set(ngrams))/len(ngrams)<.72:
         return False
@@ -77,11 +90,11 @@ def coherent_sample(text: str, *, creative: bool=False) -> bool:
         return False
     # Reject byte-level pseudo-Portuguese with isolated letters and
     # repeated non-lexical syllables. This is a display safeguard only.
-    if sum(len(word) <= 2 for word in words) / len(words) > .32:
+    # Portuguese uses many short function words; .32 rejected well-formed
+    # answers such as "A água é essencial à vida e deve ser mantida limpa."
+    if sum(len(word) <= 2 for word in words) / len(words) > .42:
         return False
     if len(words) >= 8 and recognizable / len(words) < .32:
-        return False
-    if sum(len(word) <= 2 for word in words) / len(words) > .55:
         return False
     return True
 
