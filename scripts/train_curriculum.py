@@ -208,6 +208,8 @@ def main():
             ap.error("Final evaluation requires words, sentences and reasoning training first")
         report(model, tok, words, "final", corpus)
         return
+    if args.stage == "sentences":
+        ap.error("Stage 2 locked: vocabulary V2 is a separate experiment. A shared-model transition is not yet implemented; do not treat its score as mastery.")
     idx = STAGES.index(args.stage)
     if idx and STAGES[idx-1] not in completed:
         ap.error(f"First train {STAGES[idx-1]}")
