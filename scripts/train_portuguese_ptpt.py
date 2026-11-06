@@ -20,8 +20,8 @@ from torch.nn import functional as F
 from train_language_v2 import Model, Tokenizer
 
 CONFIG = {"dim": 192, "heads": 6, "layers": 6, "context": 256}
-DIALOGUE = re.compile(r"(?m)^Diálogo:\\s*$")
-TURN = re.compile(r"^(Pessoa|Nord):\\s*(.*)$")
+DIALOGUE = re.compile(r"(?m)^Diálogo:\s*$")
+TURN = re.compile(r"^(Pessoa|Nord):\s*(.*)$")
 STAGES = ("foundation", "dialogue", "comprehension")
 # Independent composition benchmark: novel names/objects are reserved from training.
 NAMES_TRAIN = ("Ana", "João", "Maria", "Pedro", "Rita", "Luís")
@@ -31,7 +31,7 @@ OBJECTS_TEST = ("mapa", "relógio", "chapéu", "dicionário")
 VERBS = (("comprou", "comprou"), ("encontrou", "encontrou"), ("guardou", "guardou"))
 QUESTIONS = (("Quem {v} o {o}?", 0), ("O que é que {n} {v}?", 1))
 TRAIN_PREFIX = "Pessoa: "
-ANSWER_PREFIX = "\\nNord: "
+ANSWER_PREFIX = "\nNord: "
 
 def read_corpus(path):
     text = path.read_text(encoding="utf-8")
@@ -64,7 +64,7 @@ def composition(names, objects):
                 for template, target in QUESTIONS:
                     question = template.format(n=name, v=verb, o=obj)
                     answer = name if target == 0 else f"o {obj}"
-                    examples.append((f"Texto: {statement}\\nPergunta: {question}", answer))
+                    examples.append((f"Texto: {statement}\nPergunta: {question}", answer))
     return examples
 
 def make_prompt(question):
@@ -101,7 +101,7 @@ def generate(model, tok, question, max_tokens=60):
             break
         result.append(next_id)
         ids.append(next_id)
-    return tok.decode(result).split("\\nPessoa:")[0].strip()
+    return tok.decode(result).split("\nPessoa:")[0].strip()
 
 def score(model, tok, pairs):
     correct = 0
@@ -120,10 +120,8 @@ def evaluate(model, tok, dialogue_test, stage):
         "dialogue_holdout": score(model, tok, dialogue_test),
         "composition_holdout": score(model, tok, composition(NAMES_TEST, OBJECTS_TEST)[:48]),
     }
-    result["promotion_eligible"] = (
-        result["dialogue_holdout"]["accuracy_pct"] >= 90
-        and result["composition_holdout"]["accuracy_pct"] >= 90
-    )
+    result["promotion_eligible"] = False  # Requires independent evaluation and manual review
+    result["dialogue_holdout_is_independent"] = False
     result["stage"] = stage
     result["phase_2_unlocked"] = False
     return result
@@ -166,7 +164,7 @@ def main():
     held_dialogue = dialogues[:hold_count]
     train_dialogue = dialogues[hold_count:]
     train_composition = composition(NAMES_TRAIN, OBJECTS_TRAIN)
-    tokenizer_text = corpus + "\\n" + "\\n".join(
+    tokenizer_text = corpus + "\n" + "\n".join(
         q + " " + a for q, a in train_composition
     )
     tok = Tokenizer.fit(tokenizer_text, limit=1024)
